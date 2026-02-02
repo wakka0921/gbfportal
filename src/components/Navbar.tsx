@@ -47,7 +47,7 @@ export default function Navbar() {
 
                     {/* Mobile Logo/Title (Optional, adding a small indicator) */}
                     <div className="md:hidden font-black text-slate-800 tracking-tighter">
-                        栄枯必衰 Portal
+                        栄枯盛衰 Portal
                     </div>
 
                     <div className="hidden md:block">
