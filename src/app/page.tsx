@@ -13,14 +13,8 @@ import {
   parseISO, isWithinInterval, addDays, startOfDay
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
-
-interface PortalEvent {
-  id: string;
-  title: string;
-  startDate: string;
-  endDate: string;
-  color: string;
-}
+import * as actions from '@/lib/actions';
+import { PortalEvent } from '@/lib/actions';
 
 export default function PortalHome() {
   const router = useRouter();
@@ -28,7 +22,11 @@ export default function PortalHome() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
-    setEvents(mockDB.getEvents());
+    const fetchEvents = async () => {
+      const data = await actions.getEvents();
+      setEvents(data);
+    };
+    fetchEvents();
   }, []);
 
   const tools = [

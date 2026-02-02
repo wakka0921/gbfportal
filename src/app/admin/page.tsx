@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { mockDB } from '@/lib/db';
 import { Template, Material } from '@/types';
-import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
+import * as actions from '@/lib/actions';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -16,13 +17,25 @@ export default function AdminDashboard() {
     const [templates, setTemplates] = useState<Template[]>([]);
     const [events, setEvents] = useState<any[]>([]);
     const [success, setSuccess] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [initializing, setInitializing] = useState(false);
 
     useEffect(() => {
-        if (isAdmin) {
-            setMasterMaterials(mockDB.getMasterMaterials());
-            setTemplates(mockDB.getTemplates());
-            setEvents(mockDB.getEvents());
-        }
+        const checkAdmin = async () => {
+            if (isAdmin) {
+                setLoading(true);
+                const [mats, temps, evs] = await Promise.all([
+                    actions.getMasterMaterials(),
+                    actions.getTemplates(),
+                    actions.getEvents()
+                ]);
+                setMasterMaterials(mats);
+                setTemplates(temps);
+                setEvents(evs);
+                setLoading(false);
+            }
+        };
+        checkAdmin();
     }, [isAdmin]);
 
     const handleAdminLogin = (e: React.FormEvent) => {
@@ -35,26 +48,44 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleSaveMaterials = () => {
-        mockDB.saveMasterMaterials(masterMaterials);
+    const handleSaveMaterials = async () => {
+        setLoading(true);
+        await actions.saveMasterMaterials(masterMaterials);
         setSuccess('素材マスタを保存しました。');
+        setLoading(false);
         setTimeout(() => setSuccess(''), 3000);
     };
 
-    const handleSaveTemplates = () => {
-        mockDB.saveTemplates(templates);
+    const handleSaveTemplates = async () => {
+        setLoading(true);
+        await actions.saveTemplates(templates);
         setSuccess('テンプレートを保存しました。');
+        setLoading(false);
         setTimeout(() => setSuccess(''), 3000);
     };
 
-    const handleSaveEvents = () => {
-        mockDB.saveEvents(events);
+    const handleSaveEvents = async () => {
+        setLoading(true);
+        await actions.saveEvents(events);
         setSuccess('イベント設定を保存しました。');
+        setLoading(false);
+        setTimeout(() => setSuccess(''), 3000);
+    };
+
+    const handleInitDB = async () => {
+        setInitializing(true);
+        const res = await actions.initDB();
+        if (res.success) {
+            setSuccess('データベースを初期化しました。');
+        } else {
+            alert('初期化に失敗しました。Vercel Postgres の設定（POSTGRES_URL 等）を確認してください。');
+        }
+        setInitializing(false);
         setTimeout(() => setSuccess(''), 3000);
     };
 
     const addMaterialRow = () => {
-        setMasterMaterials([...masterMaterials, { id: Math.random().toString(), name: '' }]);
+        setMasterMaterials([...masterMaterials, { id: Math.random().toString(), name: '', defaultTarget: 0 }]);
     };
 
     const addTemplateRow = () => {
@@ -138,9 +169,19 @@ export default function AdminDashboard() {
                             </h2>
                             <p className="text-slate-500 text-sm font-medium">プルダウンに表示される素材の定義</p>
                         </div>
-                        <button onClick={addMaterialRow} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-blue-100 transition-all">
-                            <Plus size={16} /> 素材を追加
-                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleInitDB}
+                                disabled={initializing}
+                                className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
+                            >
+                                <RefreshCw size={16} className={initializing ? "animate-spin" : ""} />
+                                DB初期化
+                            </button>
+                            <button onClick={addMaterialRow} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-blue-100 transition-all">
+                                <Plus size={16} /> 素材を追加
+                            </button>
+                        </div>
                     </header>
 
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -148,6 +189,7 @@ export default function AdminDashboard() {
                             <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
                                 <tr>
                                     <th className="px-6 py-4">素材名</th>
+                                    <th className="px-6 py-4">デフォルト目標数</th>
                                     <th className="px-6 py-4 text-right">アクション</th>
                                 </tr>
                             </thead>
@@ -164,6 +206,18 @@ export default function AdminDashboard() {
                                                     setMasterMaterials(updated);
                                                 }}
                                                 className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-full font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+                                            />
+                                        </td>
+                                        <td className="px-6 py-3">
+                                            <input
+                                                type="number"
+                                                value={m.defaultTarget}
+                                                onChange={(e) => {
+                                                    const updated = [...masterMaterials];
+                                                    updated[idx].defaultTarget = parseInt(e.target.value) || 0;
+                                                    setMasterMaterials(updated);
+                                                }}
+                                                className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-24 font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-center"
                                             />
                                         </td>
                                         <td className="px-6 py-3 text-right">
@@ -396,8 +450,17 @@ export default function AdminDashboard() {
             </div>
 
             {success && (
-                <div className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-green-500 text-white px-8 py-4 rounded-2xl shadow-2xl font-bold animate-bounce z-50">
+                <div className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-green-500 text-white px-8 py-4 rounded-2xl shadow-2xl font-bold animate-bounce z-[100]">
                     {success}
+                </div>
+            )}
+
+            {loading && isAdmin && (
+                <div className="fixed inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-[100]">
+                    <div className="flex flex-col items-center gap-4">
+                        <RefreshCw size={48} className="text-blue-600 animate-spin" />
+                        <p className="font-black text-slate-600">読み込み中...</p>
+                    </div>
                 </div>
             )}
         </main>

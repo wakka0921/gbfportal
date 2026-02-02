@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MASTER_MATERIALS, GOAL_TEMPLATES } from '@/lib/masterData';
-import { mockDB } from '@/lib/db';
 import { ChevronLeft, Plus, Save, Trash2 } from 'lucide-react';
 import { Material } from '@/types';
+import * as actions from '@/lib/actions';
+import { mockDB } from '@/lib/db';
 
 function CreateGoal() {
     const router = useRouter();
@@ -14,10 +14,20 @@ function CreateGoal() {
 
     const [masterMaterials, setMasterMaterials] = useState<any[]>([]);
     const [templates, setTemplates] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        setMasterMaterials(mockDB.getMasterMaterials());
-        setTemplates(mockDB.getTemplates());
+        const fetchData = async () => {
+            setLoading(true);
+            const [mats, temps] = await Promise.all([
+                actions.getMasterMaterials(),
+                actions.getTemplates()
+            ]);
+            setMasterMaterials(mats);
+            setTemplates(temps);
+            setLoading(false);
+        };
+        fetchData();
     }, []);
 
     const [title, setTitle] = useState('');
@@ -49,7 +59,7 @@ function CreateGoal() {
     };
 
     const handleMaterialSelect = (index: number, name: string) => {
-        const master = MASTER_MATERIALS.find(m => m.name === name);
+        const master = masterMaterials.find(m => m.name === name);
         const updated = [...selectedMaterials];
         updated[index] = {
             ...updated[index],
