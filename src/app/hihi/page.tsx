@@ -12,6 +12,7 @@ import {
     eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, isToday
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import confetti from 'canvas-confetti';
 
 interface HihiLog {
     id: string;
@@ -35,6 +36,7 @@ export default function HihiTracker() {
     const [logs, setLogs] = useState<HihiLog[]>([]);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [showDetailedStats, setShowDetailedStats] = useState(false);
+    const [showCelebration, setShowCelebration] = useState(false);
 
     // Selection States
     const [hasBlueChest, setHasBlueChest] = useState<boolean | null>(null);
@@ -72,6 +74,8 @@ export default function HihiTracker() {
     const handleRegister = () => {
         if (hasBlueChest === null) return;
 
+        const isHihi = itemType === 'hihi';
+
         const newLog: HihiLog = {
             id: Math.random().toString(36).substr(2, 9),
             timestamp: new Date().toISOString(),
@@ -86,10 +90,40 @@ export default function HihiTracker() {
         mockDB.saveHihiLogs(newLogs);
         calculateStats(newLogs);
 
+        if (isHihi) {
+            triggerCelebration();
+        }
+
         // Reset Selection
         setHasBlueChest(null);
         setItemType(null);
         setRingType(null);
+    };
+
+    const triggerCelebration = () => {
+        setShowCelebration(true);
+
+        // Multi-burst confetti
+        const duration = 3 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+        const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+        const interval: any = setInterval(function () {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+                return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+            // since particles fall down, start a bit higher than random
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+        }, 250);
+
+        setTimeout(() => setShowCelebration(false), 5000);
     };
 
     const handleDeleteLog = (id: string) => {
@@ -487,6 +521,19 @@ export default function HihiTracker() {
                     </div>
                 </div>
             </div>
+            {showCelebration && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+                    <div className="bg-white/90 backdrop-blur-md px-12 py-8 rounded-[40px] shadow-2xl border border-amber-200 animate-in zoom-in duration-500 flex flex-col items-center gap-4">
+                        <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center animate-bounce">
+                            <Trophy size={48} />
+                        </div>
+                        <div className="text-center">
+                            <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-1">おめでとうございます！</h2>
+                            <p className="text-amber-600 font-black text-lg">ヒヒイロカネ ドロップ確定！</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
