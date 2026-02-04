@@ -134,7 +134,7 @@ export default function HihiTracker() {
         calculateStats(newLogs);
     };
 
-    const dropRate = stats.total > 0 ? ((stats.drops / stats.total) * 100).toFixed(2) : '0.00';
+    const dropRate = stats.blueChests > 0 ? ((stats.drops / stats.blueChests) * 100).toFixed(2) : '0.00';
     const blueChestRate = stats.total > 0 ? ((stats.blueChests / stats.total) * 100).toFixed(1) : '0.0';
 
     // Advanced Stats Calculation
@@ -158,10 +158,10 @@ export default function HihiTracker() {
                 eikou,
                 hajyou,
                 shigoku,
-                hihiRate: total > 0 ? ((hihi / total) * 100).toFixed(2) : '0.00',
-                eikouRate: total > 0 ? ((eikou / total) * 100).toFixed(2) : '0.00',
-                hajyouRate: total > 0 ? ((hajyou / total) * 100).toFixed(2) : '0.00',
-                shigokuRate: total > 0 ? ((shigoku / total) * 100).toFixed(2) : '0.00',
+                hihiRate: blue > 0 ? ((hihi / blue) * 100).toFixed(2) : '0.00',
+                eikouRate: blue > 0 ? ((eikou / blue) * 100).toFixed(2) : '0.00',
+                hajyouRate: blue > 0 ? ((hajyou / blue) * 100).toFixed(2) : '0.00',
+                shigokuRate: blue > 0 ? ((shigoku / blue) * 100).toFixed(2) : '0.00',
                 blueRate: total > 0 ? ((blue / total) * 100).toFixed(1) : '0.0',
             };
         };
@@ -225,7 +225,7 @@ export default function HihiTracker() {
                         </div>
                         <div className="w-px h-12 bg-white/10 hidden md:block"></div>
                         <div className="text-center">
-                            <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">ドロップ率</p>
+                            <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">ドロップ率 (青箱比)</p>
                             <p className="text-4xl font-black text-blue-400">{dropRate}<span className="text-lg opacity-50">%</span></p>
                         </div>
                         <div className="w-px h-12 bg-white/10 hidden md:block"></div>
@@ -242,7 +242,7 @@ export default function HihiTracker() {
                         <section className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
                             <h3 className="text-lg font-black flex items-center gap-2 border-b border-slate-50 pb-4">
                                 <PieChart className="text-blue-500" size={20} />
-                                アイテム別ドロップ率
+                                アイテム別ドロップ率 (青箱比)
                             </h3>
                             <div className="space-y-4">
                                 {[
