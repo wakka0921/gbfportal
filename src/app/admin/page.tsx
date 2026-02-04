@@ -33,6 +33,12 @@ export default function AdminDashboard() {
     const [isMaterialsCollapsed, setIsMaterialsCollapsed] = useState(true);
     const [materialSearchQuery, setMaterialSearchQuery] = useState('');
     const [templateSearchQueries, setTemplateSearchQueries] = useState<{ [key: string]: string }>({});
+    const [displayLimit, setDisplayLimit] = useState<number>(50);
+    const [currentPage, setCurrentPage] = useState<number>(1);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [materialSearchQuery, displayLimit]);
 
     useEffect(() => {
         const checkAdmin = async () => {
@@ -160,6 +166,17 @@ export default function AdminDashboard() {
         );
     }
 
+
+
+    const filteredMaterials = masterMaterials.filter(m =>
+        m.name.toLowerCase().includes(materialSearchQuery.toLowerCase())
+    );
+
+    const totalPages = displayLimit === 0 ? 1 : Math.ceil(filteredMaterials.length / displayLimit);
+    const displayedMaterials = displayLimit === 0
+        ? filteredMaterials
+        : filteredMaterials.slice((currentPage - 1) * displayLimit, currentPage * displayLimit);
+
     return (
         <main className="min-h-screen bg-slate-50 p-6 md:p-12 pb-32 text-slate-900">
             <div className="max-w-5xl mx-auto space-y-12">
@@ -181,7 +198,7 @@ export default function AdminDashboard() {
                                 <Database className="text-blue-500" />
                                 素材マスター管理
                             </h2>
-                            <p className="text-slate-500 text-sm font-medium">プルダウンに表示される素材の定義</p>
+                            <p className="text-slate-500 text-sm font-medium">定義済みの素材総数: <span className="text-slate-900 font-black">{masterMaterials.length}</span> 件</p>
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -207,15 +224,32 @@ export default function AdminDashboard() {
 
                     {!isMaterialsCollapsed && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                            <div className="relative max-w-sm">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <input
-                                    type="text"
-                                    placeholder="素材名で検索..."
-                                    value={materialSearchQuery}
-                                    onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                                />
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div className="relative w-full md:max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="素材名で検索..."
+                                        value={materialSearchQuery}
+                                        onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-4 bg-white border border-slate-100 p-1.5 rounded-2xl shadow-sm">
+                                    <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest ml-3 mr-2">表示数:</span>
+                                    <div className="flex gap-1">
+                                        {[10, 50, 100, 0].map(limit => (
+                                            <button
+                                                key={limit}
+                                                onClick={() => setDisplayLimit(limit)}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${displayLimit === limit ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                                            >
+                                                {limit === 0 ? 'すべて' : limit}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -228,39 +262,73 @@ export default function AdminDashboard() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
-                                            {masterMaterials
-                                                .filter(m => m.name.toLowerCase().includes(materialSearchQuery.toLowerCase()))
-                                                .map((m, idx) => {
-                                                    const originalIdx = masterMaterials.findIndex(orig => orig.id === m.id);
-                                                    return (
-                                                        <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
-                                                            <td className="px-6 py-3">
-                                                                <input
-                                                                    type="text"
-                                                                    value={m.name}
-                                                                    onChange={(e) => {
-                                                                        const updated = [...masterMaterials];
-                                                                        updated[originalIdx].name = e.target.value;
-                                                                        setMasterMaterials(updated);
-                                                                    }}
-                                                                    className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-full font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                                                                />
-                                                            </td>
-                                                            <td className="px-6 py-3 text-right">
-                                                                <button
-                                                                    onClick={() => setMasterMaterials(masterMaterials.filter(orig => orig.id !== m.id))}
-                                                                    className="text-slate-300 hover:text-red-500 transition-colors"
-                                                                >
-                                                                    <Trash2 size={18} />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
+                                            {displayedMaterials.map((m) => {
+                                                const originalIdx = masterMaterials.findIndex(orig => orig.id === m.id);
+                                                return (
+                                                    <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="px-6 py-3">
+                                                            <input
+                                                                type="text"
+                                                                value={m.name}
+                                                                onChange={(e) => {
+                                                                    const updated = [...masterMaterials];
+                                                                    updated[originalIdx].name = e.target.value;
+                                                                    setMasterMaterials(updated);
+                                                                }}
+                                                                className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-full font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-3 text-right">
+                                                            <button
+                                                                onClick={() => setMasterMaterials(masterMaterials.filter(orig => orig.id !== m.id))}
+                                                                className="text-slate-300 hover:text-red-500 transition-colors"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="p-4 bg-slate-50/50 border-t border-slate-50 flex justify-end">
+
+                                {totalPages > 1 && (
+                                    <div className="px-6 py-4 bg-slate-50/30 border-t border-slate-50 flex items-center justify-center gap-2">
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-2 rounded-lg text-slate-400 hover:bg-white hover:text-slate-800 disabled:opacity-30 transition-all font-black text-xs uppercase"
+                                        >
+                                            前へ
+                                        </button>
+                                        <div className="flex gap-1 flex-wrap justify-center">
+                                            {[...Array(totalPages)].map((_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setCurrentPage(i + 1)}
+                                                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${currentPage === i + 1 ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:bg-white hover:text-slate-800'}`}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="p-2 rounded-lg text-slate-400 hover:bg-white hover:text-slate-800 disabled:opacity-30 transition-all font-black text-xs uppercase"
+                                        >
+                                            次へ
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="p-4 bg-slate-50/50 border-t border-slate-50 flex items-center justify-between">
+                                    <div className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-4">
+                                        <span>ページ: <span className="text-slate-900 font-black">{currentPage} / {totalPages}</span></span>
+                                        <span className="hidden md:inline">|</span>
+                                        <span>検索一致: <span className="text-slate-900 font-black">{filteredMaterials.length}</span> 件</span>
+                                    </div>
                                     <button
                                         onClick={handleSaveMaterials}
                                         className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all"
