@@ -3,6 +3,8 @@
 import { sql } from '@vercel/postgres';
 import { Template } from '@/types';
 import { revalidatePath } from 'next/cache';
+import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
 
 export interface PortalEvent {
     id: string;
@@ -50,6 +52,35 @@ export async function initDB() {
         end_date DATE NOT NULL,
         color TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+        await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+        await sql`
+      CREATE TABLE IF NOT EXISTS goals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+        await sql`
+      CREATE TABLE IF NOT EXISTS goal_materials (
+        id SERIAL PRIMARY KEY,
+        goal_id UUID REFERENCES goals(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        current_count INTEGER DEFAULT 0,
+        target_count INTEGER NOT NULL,
+        sort_order INTEGER DEFAULT 0
       );
     `;
 
@@ -178,4 +209,189 @@ export async function saveEvents(events: any[]) {
         console.error('Failed to save events:', error);
         return { success: false };
     }
+}
+
+// Goals Management
+export async function getGoals() {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return [];
+
+        const { rows: goalRows } = await sql`
+      SELECT * FROM goals WHERE user_id = ${user.id} ORDER BY created_at DESC
+    `;
+
+        const goals = [];
+        for (const g of goalRows) {
+            const { rows: materialRows } = await sql`
+        SELECT id, name, current_count as current, target_count as target 
+        FROM goal_materials 
+        WHERE goal_id = ${g.id} 
+        ORDER BY sort_order ASC
+      `;
+            goals.push({
+                id: g.id,
+                title: g.title,
+                materials: materialRows
+            });
+        }
+        return goals;
+    } catch (error) {
+        console.error('Failed to fetch goals:', error);
+        return [];
+    }
+}
+
+export async function getGoalById(id: string) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return null;
+
+        const { rows: goalRows } = await sql`
+      SELECT * FROM goals WHERE id = ${id} AND user_id = ${user.id}
+    `;
+        if (goalRows.length === 0) return null;
+
+        const g = goalRows[0];
+        const { rows: materialRows } = await sql`
+      SELECT id, name, current_count as current, target_count as target 
+      FROM goal_materials 
+      WHERE goal_id = ${g.id} 
+      ORDER BY sort_order ASC
+    `;
+
+        return {
+            id: g.id,
+            title: g.title,
+            materials: materialRows
+        };
+    } catch (error) {
+        console.error('Failed to fetch goal:', error);
+        return null;
+    }
+}
+
+export async function createGoal(title: string, materials: { name: string, target: number }[]) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        const { rows } = await sql`
+      INSERT INTO goals (user_id, title) VALUES (${user.id}, ${title}) RETURNING id
+    `;
+        const goalId = rows[0].id;
+
+        for (let i = 0; i < materials.length; i++) {
+            const m = materials[i];
+            await sql`
+        INSERT INTO goal_materials (goal_id, name, target_count, sort_order)
+        VALUES (${goalId}, ${m.name}, ${m.target}, ${i})
+      `;
+        }
+
+        revalidatePath('/goals');
+        return { success: true, id: goalId };
+    } catch (error) {
+        console.error('Failed to create goal:', error);
+        return { success: false, error: 'Failed to create goal' };
+    }
+}
+
+export async function updateGoalProgress(goalId: string, materials: { id: string, current: number }[]) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        // Verify ownership
+        const { rows: goalRows } = await sql`SELECT id FROM goals WHERE id = ${goalId} AND user_id = ${user.id}`;
+        if (goalRows.length === 0) return { success: false, error: 'Goal not found' };
+
+        for (const m of materials) {
+            await sql`
+        UPDATE goal_materials 
+        SET current_count = ${m.current} 
+        WHERE id = ${m.id} AND goal_id = ${goalId}
+      `;
+        }
+
+        revalidatePath(`/goals/${goalId}`);
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to update progress:', error);
+        return { success: false };
+    }
+}
+
+export async function deleteGoal(id: string) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        await sql`DELETE FROM goals WHERE id = ${id} AND user_id = ${user.id}`;
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to delete goal:', error);
+        return { success: false };
+    }
+}
+
+// User Authentication
+export async function register(username: string, password: string) {
+    try {
+        const { rows: existing } = await sql`SELECT id FROM users WHERE username = ${username}`;
+        if (existing.length > 0) {
+            return { success: false, error: 'このユーザー名は既に使用されています。' };
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const { rows } = await sql`
+      INSERT INTO users (username, password_hash)
+      VALUES (${username}, ${hashedPassword})
+      RETURNING id, username
+    `;
+
+        const user = rows[0];
+        (await cookies()).set('user_id', user.id, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
+        (await cookies()).set('username', user.username, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
+
+        return { success: true, user: { id: user.id, username: user.username } };
+    } catch (error) {
+        console.error('Registration failed:', error);
+        return { success: false, error: '登録に失敗しました。' };
+    }
+}
+
+export async function login(username: string, password: string) {
+    try {
+        const { rows } = await sql`SELECT * FROM users WHERE username = ${username}`;
+        const user = rows[0];
+
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+            return { success: false, error: 'ユーザー名またはパスワードが正しくありません。' };
+        }
+
+        (await cookies()).set('user_id', user.id, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
+        (await cookies()).set('username', user.username, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
+
+        return { success: true, user: { id: user.id, username: user.username } };
+    } catch (error) {
+        console.error('Login failed:', error);
+        return { success: false, error: 'ログインに失敗しました。' };
+    }
+}
+
+export async function logout() {
+    (await cookies()).delete('user_id');
+    (await cookies()).delete('username');
+    return { success: true };
+}
+
+export async function getCurrentUser() {
+    const userId = (await cookies()).get('user_id')?.value;
+    const username = (await cookies()).get('username')?.value;
+
+    if (!userId || !username) return null;
+    return { id: userId, username };
 }

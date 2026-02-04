@@ -4,8 +4,19 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { mockDB } from '@/lib/db';
 import { Template, Material } from '@/types';
-import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon, RefreshCw, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import * as actions from '@/lib/actions';
+
+const EVENT_COLORS = [
+    { label: '火 (赤)', value: '#ef4444' },
+    { label: '水 (青)', value: '#3b82f6' },
+    { label: '土 (橙)', value: '#f97316' },
+    { label: '風 (緑)', value: '#22c55e' },
+    { label: '光 (黄)', value: '#eab308' },
+    { label: '闇 (紫)', value: '#a855f7' },
+    { label: 'キャンペーン (灰)', value: '#64748b' },
+    { label: 'その他 (灰)', value: '#94a3b8' },
+];
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -19,6 +30,9 @@ export default function AdminDashboard() {
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
     const [initializing, setInitializing] = useState(false);
+    const [isMaterialsCollapsed, setIsMaterialsCollapsed] = useState(true);
+    const [materialSearchQuery, setMaterialSearchQuery] = useState('');
+    const [templateSearchQueries, setTemplateSearchQueries] = useState<{ [key: string]: string }>({});
 
     useEffect(() => {
         const checkAdmin = async () => {
@@ -94,7 +108,7 @@ export default function AdminDashboard() {
 
     const addEventRow = () => {
         const today = new Date().toISOString().split('T')[0];
-        setEvents([...events, { id: Math.random().toString(), title: '', startDate: today, endDate: today, color: '#3b82f6' }]);
+        setEvents([...events, { id: Math.random().toString(), title: '', startDate: today, endDate: today, color: EVENT_COLORS[0].value }]);
     };
 
     const addTemplateMaterial = (templateId: string) => {
@@ -171,6 +185,13 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex gap-2">
                             <button
+                                onClick={() => setIsMaterialsCollapsed(!isMaterialsCollapsed)}
+                                className="bg-white border border-slate-200 text-slate-600 px-3 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-slate-50 transition-all"
+                            >
+                                {isMaterialsCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                                {isMaterialsCollapsed ? '表示' : '隠す'}
+                            </button>
+                            <button
                                 onClick={handleInitDB}
                                 disabled={initializing}
                                 className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
@@ -184,63 +205,72 @@ export default function AdminDashboard() {
                         </div>
                     </header>
 
-                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                <tr>
-                                    <th className="px-6 py-4">素材名</th>
-                                    <th className="px-6 py-4">デフォルト目標数</th>
-                                    <th className="px-6 py-4 text-right">アクション</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {masterMaterials.map((m, idx) => (
-                                    <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="px-6 py-3">
-                                            <input
-                                                type="text"
-                                                value={m.name}
-                                                onChange={(e) => {
-                                                    const updated = [...masterMaterials];
-                                                    updated[idx].name = e.target.value;
-                                                    setMasterMaterials(updated);
-                                                }}
-                                                className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-full font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                                            />
-                                        </td>
-                                        <td className="px-6 py-3">
-                                            <input
-                                                type="number"
-                                                value={m.defaultTarget}
-                                                onChange={(e) => {
-                                                    const updated = [...masterMaterials];
-                                                    updated[idx].defaultTarget = parseInt(e.target.value) || 0;
-                                                    setMasterMaterials(updated);
-                                                }}
-                                                className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-24 font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-center"
-                                            />
-                                        </td>
-                                        <td className="px-6 py-3 text-right">
-                                            <button
-                                                onClick={() => setMasterMaterials(masterMaterials.filter((_, i) => i !== idx))}
-                                                className="text-slate-300 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <div className="p-4 bg-slate-50/50 border-t border-slate-50 flex justify-end">
-                            <button
-                                onClick={handleSaveMaterials}
-                                className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all"
-                            >
-                                <Save size={18} /> マスタを保存
-                            </button>
+                    {!isMaterialsCollapsed && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    type="text"
+                                    placeholder="素材名で検索..."
+                                    value={materialSearchQuery}
+                                    onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+                                />
+                            </div>
+
+                            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-left min-w-[600px]">
+                                        <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                            <tr>
+                                                <th className="px-6 py-4">素材名</th>
+                                                <th className="px-6 py-4 text-right">アクション</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {masterMaterials
+                                                .filter(m => m.name.toLowerCase().includes(materialSearchQuery.toLowerCase()))
+                                                .map((m, idx) => {
+                                                    const originalIdx = masterMaterials.findIndex(orig => orig.id === m.id);
+                                                    return (
+                                                        <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="px-6 py-3">
+                                                                <input
+                                                                    type="text"
+                                                                    value={m.name}
+                                                                    onChange={(e) => {
+                                                                        const updated = [...masterMaterials];
+                                                                        updated[originalIdx].name = e.target.value;
+                                                                        setMasterMaterials(updated);
+                                                                    }}
+                                                                    className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-full font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
+                                                                />
+                                                            </td>
+                                                            <td className="px-6 py-3 text-right">
+                                                                <button
+                                                                    onClick={() => setMasterMaterials(masterMaterials.filter(orig => orig.id !== m.id))}
+                                                                    className="text-slate-300 hover:text-red-500 transition-colors"
+                                                                >
+                                                                    <Trash2 size={18} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="p-4 bg-slate-50/50 border-t border-slate-50 flex justify-end">
+                                    <button
+                                        onClick={handleSaveMaterials}
+                                        className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all"
+                                    >
+                                        <Save size={18} /> マスタを保存
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </section>
 
                 <section className="space-y-6">
@@ -289,21 +319,60 @@ export default function AdminDashboard() {
                                         <span></span>
                                     </div>
                                     {t.materials.map((tm, tmIdx) => (
-                                        <div key={tmIdx} className="flex gap-4 items-center bg-slate-50 p-3 rounded-xl">
-                                            <select
-                                                value={tm.name}
-                                                onChange={(e) => {
-                                                    const updated = [...templates];
-                                                    updated[tIdx].materials[tmIdx].name = e.target.value;
-                                                    setTemplates(updated);
-                                                }}
-                                                className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm outline-none"
-                                            >
-                                                <option value="">素材を選択</option>
-                                                {masterMaterials.map(mm => (
-                                                    <option key={mm.id} value={mm.name}>{mm.name}</option>
-                                                ))}
-                                            </select>
+                                        <div key={tmIdx} className="flex gap-4 items-center bg-slate-50 p-3 rounded-xl relative">
+                                            <div className="flex-1 relative group">
+                                                <input
+                                                    type="text"
+                                                    value={tm.name}
+                                                    placeholder="素材を検索..."
+                                                    onChange={(e) => {
+                                                        const query = e.target.value;
+                                                        const updated = [...templates];
+                                                        updated[tIdx].materials[tmIdx].name = query;
+                                                        setTemplates(updated);
+                                                        setTemplateSearchQueries({ ...templateSearchQueries, [`${t.id}-${tmIdx}`]: query });
+                                                    }}
+                                                    onFocus={() => {
+                                                        setTemplateSearchQueries({ ...templateSearchQueries, [`${t.id}-${tmIdx}`]: tm.name });
+                                                    }}
+                                                    onBlur={() => {
+                                                        // Use timeout to allow click event on dropdown to fire first
+                                                        setTimeout(() => {
+                                                            setTemplateSearchQueries(prev => {
+                                                                const next = { ...prev };
+                                                                delete next[`${t.id}-${tmIdx}`];
+                                                                return next;
+                                                            });
+                                                        }, 200);
+                                                    }}
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm outline-none focus:ring-2 focus:ring-amber-100"
+                                                />
+                                                {templateSearchQueries[`${t.id}-${tmIdx}`] !== undefined && (
+                                                    <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto overflow-x-hidden">
+                                                        {masterMaterials
+                                                            .filter(mm => mm.name.toLowerCase().includes((templateSearchQueries[`${t.id}-${tmIdx}`] || '').toLowerCase()))
+                                                            .map(mm => (
+                                                                <button
+                                                                    key={mm.id}
+                                                                    onClick={() => {
+                                                                        const updated = [...templates];
+                                                                        updated[tIdx].materials[tmIdx].name = mm.name;
+                                                                        setTemplates(updated);
+                                                                        const queries = { ...templateSearchQueries };
+                                                                        delete queries[`${t.id}-${tmIdx}`];
+                                                                        setTemplateSearchQueries(queries);
+                                                                    }}
+                                                                    className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 font-bold text-slate-700 transition-colors whitespace-nowrap overflow-hidden text-ellipsis"
+                                                                >
+                                                                    {mm.name}
+                                                                </button>
+                                                            ))}
+                                                        {masterMaterials.filter(mm => mm.name.toLowerCase().includes((templateSearchQueries[`${t.id}-${tmIdx}`] || '').toLowerCase())).length === 0 && (
+                                                            <div className="px-4 py-3 text-xs text-slate-400 italic">見つかりません</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <input
                                                 type="number"
                                                 value={tm.target}
@@ -364,79 +433,85 @@ export default function AdminDashboard() {
                     </header>
 
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden text-sm">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                <tr>
-                                    <th className="px-6 py-4">イベント名</th>
-                                    <th className="px-6 py-4">開始日</th>
-                                    <th className="px-6 py-4">終了日</th>
-                                    <th className="px-6 py-4">色</th>
-                                    <th className="px-6 py-4 text-right">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {events.map((ev, idx) => (
-                                    <tr key={ev.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="px-4 py-3">
-                                            <input
-                                                type="text"
-                                                value={ev.title}
-                                                onChange={(e) => {
-                                                    const updated = [...events];
-                                                    updated[idx].title = e.target.value;
-                                                    setEvents(updated);
-                                                }}
-                                                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full font-bold outline-none focus:ring-2 focus:ring-indigo-100"
-                                            />
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <input
-                                                type="date"
-                                                value={ev.startDate}
-                                                onChange={(e) => {
-                                                    const updated = [...events];
-                                                    updated[idx].startDate = e.target.value;
-                                                    setEvents(updated);
-                                                }}
-                                                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 outline-none"
-                                            />
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <input
-                                                type="date"
-                                                value={ev.endDate}
-                                                onChange={(e) => {
-                                                    const updated = [...events];
-                                                    updated[idx].endDate = e.target.value;
-                                                    setEvents(updated);
-                                                }}
-                                                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 outline-none"
-                                            />
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <input
-                                                type="color"
-                                                value={ev.color}
-                                                onChange={(e) => {
-                                                    const updated = [...events];
-                                                    updated[idx].color = e.target.value;
-                                                    setEvents(updated);
-                                                }}
-                                                className="w-10 h-10 border-none bg-transparent cursor-pointer"
-                                            />
-                                        </td>
-                                        <td className="px-6 py-3 text-right">
-                                            <button
-                                                onClick={() => setEvents(events.filter((_, i) => i !== idx))}
-                                                className="text-slate-300 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </td>
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left min-w-[700px]">
+                                <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                    <tr>
+                                        <th className="px-6 py-4">イベント名</th>
+                                        <th className="px-6 py-4">開始日</th>
+                                        <th className="px-6 py-4">終了日</th>
+                                        <th className="px-6 py-4">色</th>
+                                        <th className="px-6 py-4 text-right">操作</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {events.map((ev, idx) => (
+                                        <tr key={ev.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    type="text"
+                                                    value={ev.title}
+                                                    onChange={(e) => {
+                                                        const updated = [...events];
+                                                        updated[idx].title = e.target.value;
+                                                        setEvents(updated);
+                                                    }}
+                                                    className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full font-bold outline-none focus:ring-2 focus:ring-indigo-100"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    type="date"
+                                                    value={ev.startDate}
+                                                    onChange={(e) => {
+                                                        const updated = [...events];
+                                                        updated[idx].startDate = e.target.value;
+                                                        setEvents(updated);
+                                                    }}
+                                                    className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 outline-none"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    type="date"
+                                                    value={ev.endDate}
+                                                    onChange={(e) => {
+                                                        const updated = [...events];
+                                                        updated[idx].endDate = e.target.value;
+                                                        setEvents(updated);
+                                                    }}
+                                                    className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 outline-none"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <select
+                                                    value={ev.color}
+                                                    onChange={(e) => {
+                                                        const updated = [...events];
+                                                        updated[idx].color = e.target.value;
+                                                        setEvents(updated);
+                                                    }}
+                                                    style={{ borderLeft: `4px solid ${ev.color}` }}
+                                                    className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 outline-none w-full font-bold"
+                                                >
+                                                    {EVENT_COLORS.map(c => (
+                                                        <option key={c.value} value={c.value}>{c.label}</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-3 text-right">
+                                                <button
+                                                    onClick={() => setEvents(events.filter((_, i) => i !== idx))}
+                                                    className="text-slate-300 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                         <div className="p-4 bg-slate-50/50 border-t border-slate-50 flex justify-end">
                             <button
                                 onClick={handleSaveEvents}

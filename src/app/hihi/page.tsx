@@ -237,7 +237,7 @@ export default function HihiTracker() {
                 </header>
 
                 {showDetailedStats && (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
                         {/* Overall Detailed */}
                         <section className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-6">
                             <h3 className="text-lg font-black flex items-center gap-2 border-b border-slate-50 pb-4">
@@ -330,7 +330,7 @@ export default function HihiTracker() {
                                 {hasBlueChest === true && (
                                     <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                                         <label className="text-[15px] font-black text-slate-600 uppercase tracking-widest px-1">Step 2: ドロップ内容</label>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <button
                                                 onClick={() => { setItemType('hihi'); setRingType(null); }}
                                                 className={`py-4 rounded-2xl font-black text-sm transition-all border-2 ${itemType === 'hihi' ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-amber-200'}`}

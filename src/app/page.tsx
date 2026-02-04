@@ -32,7 +32,7 @@ export default function PortalHome() {
   const tools = [
     {
       title: 'グラブル目標管理ツール',
-      description: '素材集めや装備作成の進捗をパスワードで管理。',
+      description: '素材集めや装備作成の進捗管理',
       icon: <LayoutDashboard size={32} />,
       path: '/tracker',
       color: 'bg-blue-500',
@@ -41,7 +41,7 @@ export default function PortalHome() {
     },
     {
       title: '古戦場貢献度計算機',
-      description: '必要貢献度や討伐数をシミュレーション。',
+      description: '必要貢献度や討伐数を計算',
       icon: <Calculator size={32} />,
       path: '/calculator',
       color: 'bg-amber-500',
@@ -50,7 +50,7 @@ export default function PortalHome() {
     },
     {
       title: 'ヒヒ堀りツール',
-      description: 'ドロップデータを集計・分析。試行回数や確率を自動計算。',
+      description: 'ヒヒ掘りカウンター',
       icon: <Zap size={32} />,
       path: '/hihi',
       color: 'bg-indigo-500',
@@ -154,12 +154,12 @@ export default function PortalHome() {
       <div className="max-w-6xl mx-auto px-6 py-20 space-y-24">
         {/* Event Calendar Section */}
         <section className="space-y-8">
-          <div className="flex items-end justify-between">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div className="space-y-1">
               <h2 className="text-3xl font-black text-slate-900">イベントカレンダー</h2>
               <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">グラブルのスケジュールを確認</p>
             </div>
-            <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm w-fit self-end md:self-auto">
               <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1 hover:bg-slate-50 rounded-lg transition-colors">
                 <ChevronLeft size={20} />
               </button>
@@ -173,68 +173,75 @@ export default function PortalHome() {
           </div>
 
           <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-slate-50">
-              {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
-                <div key={day} className={`py-4 text-center text-[10px] font-black uppercase tracking-widest ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
-                  {day}
+            <div className="overflow-x-auto">
+              <div className="min-w-[800px]">
+                <div className="grid grid-cols-7 border-b border-slate-50 bg-slate-50/50">
+                  {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
+                    <div key={day} className={`py-4 text-center text-[10px] font-black uppercase tracking-widest ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
+                      {day}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {calendarDays.map((day, i) => {
-                const dayEvents = getEventsForDay(day);
-                const isToday = isSameDay(day, new Date());
+                <div className="grid grid-cols-7">
+                  {calendarDays.map((day, i) => {
+                    const dayEvents = getEventsForDay(day);
+                    const isToday = isSameDay(day, new Date());
 
-                // Sort events by lane
-                const sortedDayEvents = [...dayEvents].sort((a, b) => (eventLanes[a.id] || 0) - (eventLanes[b.id] || 0));
+                    // Sort events by lane
+                    const sortedDayEvents = [...dayEvents].sort((a, b) => (eventLanes[a.id] || 0) - (eventLanes[b.id] || 0));
 
-                // Fill in empty slots up to max lane to keep consistent height
-                const maxLane = Math.max(-1, ...dayEvents.map(e => eventLanes[e.id] ?? -1));
-                const lanesToRender = [];
-                for (let l = 0; l <= maxLane; l++) {
-                  lanesToRender.push(sortedDayEvents.find(e => eventLanes[e.id] === l) || null);
-                }
+                    // Fill in empty slots up to max lane to keep consistent height
+                    const maxLane = Math.max(-1, ...dayEvents.map(e => eventLanes[e.id] ?? -1));
+                    const lanesToRender = [];
+                    for (let l = 0; l <= maxLane; l++) {
+                      lanesToRender.push(sortedDayEvents.find(e => eventLanes[e.id] === l) || null);
+                    }
 
-                return (
-                  <div
-                    key={i}
-                    className={`min-h-[120px] pb-4 border-r border-b border-slate-50 flex flex-col gap-0 transition-colors ${!isSameMonth(day, monthStart) ? 'bg-slate-50/30' : ''} ${isToday ? 'bg-blue-50/20' : ''}`}
-                  >
-                    <div className="flex justify-between items-center p-2 mb-1">
-                      <span className={`text-xs font-black ${!isSameMonth(day, monthStart) ? 'text-slate-200' : isToday ? 'text-blue-600' : 'text-slate-400'}`}>
-                        {format(day, 'd')}
-                      </span>
-                      {isToday && <span className="w-1 h-1 bg-blue-600 rounded-full"></span>}
-                    </div>
-                    <div className="flex flex-col gap-px flex-1">
-                      {lanesToRender.map((ev, lIdx) => {
-                        if (!ev) return <div key={`empty-${lIdx}`} className="h-4" />;
+                    return (
+                      <div
+                        key={i}
+                        className={`min-h-[120px] pb-4 border-r border-b border-slate-50 flex flex-col gap-0 transition-colors ${!isSameMonth(day, monthStart) ? 'bg-slate-50/30' : ''} ${isToday ? 'bg-blue-50/20' : ''}`}
+                      >
+                        <div className="flex justify-between items-center p-2 mb-1">
+                          <span className={`text-xs font-black ${!isSameMonth(day, monthStart) ? 'text-slate-200' : isToday ? 'text-blue-600' : 'text-slate-400'}`}>
+                            {format(day, 'd')}
+                          </span>
+                          {isToday && <span className="w-1 h-1 bg-blue-600 rounded-full"></span>}
+                        </div>
+                        <div className="flex flex-col gap-px flex-1">
+                          {lanesToRender.map((ev, lIdx) => {
+                            if (!ev) return <div key={`empty-${lIdx}`} className="h-5" />;
 
-                        const isStart = isSameDay(parseISO(ev.startDate), day);
-                        const isEnd = isSameDay(parseISO(ev.endDate), day);
-                        const isSunday = format(day, 'e') === '1';
-                        const isSaturday = format(day, 'e') === '7';
+                            const isStart = isSameDay(parseISO(ev.startDate), day);
+                            const isEnd = isSameDay(parseISO(ev.endDate), day);
+                            const isSunday = format(day, 'e') === '1';
+                            const isSaturday = format(day, 'e') === '7';
 
-                        return (
-                          <div
-                            key={ev.id}
-                            style={{ backgroundColor: ev.color }}
-                            className={`
-                                                    h-4 text-[9px] text-white font-black flex items-center px-1.5 truncate shadow-sm transition-all
-                                                    ${isStart || isSunday ? 'rounded-l-sm ml-0.5' : '-ml-px'}
-                                                    ${isEnd || isSaturday ? 'rounded-r-sm mr-0.5' : '-mr-px'}
-                                                    ${!isStart && !isEnd ? 'opacity-90' : ''}
-                                                `}
-                            title={ev.title}
-                          >
-                            {(isStart || isSunday) ? ev.title : '\u00A0'}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+                            return (
+                              <a
+                                key={ev.id}
+                                href={`https://www.google.com/search?q=${encodeURIComponent(ev.title)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ backgroundColor: ev.color }}
+                                className={`
+                                                     h-5 text-[9px] text-white font-black flex items-center px-1.5 truncate shadow-sm transition-all hover:brightness-110 cursor-pointer
+                                                     ${isStart || isSunday ? 'rounded-l-sm ml-0.5' : '-ml-px'}
+                                                     ${isEnd || isSaturday ? 'rounded-r-sm mr-0.5' : '-mr-px'}
+                                                     ${!isStart && !isEnd ? 'opacity-90' : ''}
+                                                 `}
+                                title={`${ev.title} をGoogleで検索`}
+                              >
+                                {(isStart || isSunday) ? ev.title : '\u00A0'}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 

@@ -2,36 +2,37 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Plus, Save, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Save, Trash2, Loader2 } from 'lucide-react';
 import { Material } from '@/types';
 import * as actions from '@/lib/actions';
-import { mockDB } from '@/lib/db';
 
 function CreateGoal() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const pwParam = searchParams.get('pw') || '';
 
     const [masterMaterials, setMasterMaterials] = useState<any[]>([]);
     const [templates, setTemplates] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            const [mats, temps] = await Promise.all([
+            const [mats, temps, currentUser] = await Promise.all([
                 actions.getMasterMaterials(),
-                actions.getTemplates()
+                actions.getTemplates(),
+                actions.getCurrentUser()
             ]);
             setMasterMaterials(mats);
             setTemplates(temps);
+            setUser(currentUser);
+            if (!currentUser) router.push('/login');
             setLoading(false);
         };
         fetchData();
-    }, []);
+    }, [router]);
 
     const [title, setTitle] = useState('');
-    const [password, setPassword] = useState(pwParam);
     const [selectedMaterials, setSelectedMaterials] = useState<Partial<Material>[]>([]);
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -70,43 +71,36 @@ function CreateGoal() {
         setSelectedMaterials(updated);
     };
 
-    const handleSave = () => {
-        if (!title || !password || selectedMaterials.length === 0) {
+    const handleSave = async () => {
+        if (!title || selectedMaterials.length === 0) {
             setError('すべての項目を入力してください。');
             return;
         }
 
-        if (password.length !== 4) {
-            setError('パスワードは4桁で入力してください。');
-            return;
+        setIsSaving(true);
+        setError('');
+
+        const res = await actions.createGoal(title, selectedMaterials.map(m => ({
+            name: m.name || '',
+            target: m.target || 0
+        })));
+
+        if (res.success) {
+            setShowSuccess(true);
+            setTimeout(() => {
+                router.push(`/goals/${res.id}`);
+            }, 2000);
+        } else {
+            setError(res.error || '登録に失敗しました。');
+            setIsSaving(false);
         }
-
-        // If pwParam is present, we are adding to an existing set of goals, so skip duplicate check
-        if (!pwParam && mockDB.checkPasswordExists(password)) {
-            setError('このパスワードは既に使用されています。別のパスワードを設定してください。');
-            return;
-        }
-
-        const newGoal = {
-            id: Math.random().toString(36).substr(2, 9),
-            title,
-            password,
-            materials: selectedMaterials.map(m => ({
-                id: m.id || Math.random().toString(),
-                name: m.name || '',
-                current: m.current || 0,
-                target: m.target || 0,
-                startDate: new Date().toISOString(),
-                endDate: new Date().toISOString(),
-            }))
-        };
-
-        mockDB.saveGoal(newGoal);
-        setShowSuccess(true);
-        setTimeout(() => {
-            router.push(`/goals/${newGoal.id}`);
-        }, 2000);
     };
+
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center">
+            <Loader2 className="animate-spin text-indigo-500" size={40} />
+        </div>
+    );
 
     if (showSuccess) {
         return (
@@ -162,19 +156,6 @@ function CreateGoal() {
                                 className="w-full text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
                             />
                         </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">管理用パスワード (英数字4桁)</label>
-                            <input
-                                type="text"
-                                maxLength={4}
-                                placeholder="例: a1b2"
-                                value={password}
-                                readOnly={!!pwParam}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className={`w-full text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all font-mono ${pwParam ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            />
-                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -191,8 +172,8 @@ function CreateGoal() {
 
                         <div className="space-y-3">
                             {selectedMaterials.map((m, index) => (
-                                <div key={m.id} className="flex gap-3 items-end bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div className="flex-1 space-y-2">
+                                <div key={m.id} className="flex flex-col sm:flex-row gap-4 sm:gap-3 items-start sm:items-end bg-slate-50 p-4 rounded-2xl border border-slate-100 relative">
+                                    <div className="w-full sm:flex-1 space-y-2">
                                         <label className="text-[10px] uppercase font-bold text-slate-400">素材名</label>
                                         <select
                                             value={m.name}
@@ -205,7 +186,7 @@ function CreateGoal() {
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="w-24 space-y-2">
+                                    <div className="w-full sm:w-24 space-y-2">
                                         <label className="text-[10px] uppercase font-bold text-slate-400">必要数</label>
                                         <input
                                             type="number"
@@ -218,7 +199,7 @@ function CreateGoal() {
                                             className="w-full bg-white text-slate-700 border border-slate-200 rounded-lg px-2 py-2 text-sm text-center"
                                         />
                                     </div>
-                                    <button onClick={() => removeMaterialField(m.id!)} className="p-2 text-slate-300 hover:text-red-500 transition-colors mb-0.5">
+                                    <button onClick={() => removeMaterialField(m.id!)} className="absolute top-2 right-2 sm:relative sm:top-auto sm:right-auto p-2 text-slate-300 hover:text-red-500 transition-colors sm:mb-0.5">
                                         <Trash2 size={18} />
                                     </button>
                                 </div>
@@ -230,9 +211,10 @@ function CreateGoal() {
 
                     <button
                         onClick={handleSave}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2"
+                        disabled={isSaving}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        <Save size={20} />
+                        {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
                         この内容で目標を登録する
                     </button>
                 </div>
