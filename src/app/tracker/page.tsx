@@ -84,7 +84,7 @@ export default function TrackerHome() {
                             トップページ
                         </div>
                         <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                            ようこそ <span className="text-indigo-600 underline decoration-indigo-100 underline-offset-8">{user.username}</span>
+                            ようこそ <span className="text-indigo-600 underline decoration-indigo-100 underline-offset-8">{user.username}</span>さん
                         </h1>
                     </div>
                     <button
