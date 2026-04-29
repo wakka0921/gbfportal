@@ -31,7 +31,7 @@ export async function getUserDailyTasks() {
       FROM user_configs uc
       JOIN multi_battles mb ON uc.battle_id = mb.id
       LEFT JOIN (
-        SELECT battle_id, COUNT(*) as completed_count, bool_or(has_img_flag) as has_img_flag
+        SELECT battle_id, SUM(completed_count) as completed_count, bool_or(has_img_flag) as has_img_flag
         FROM daily_logs
         WHERE user_id = ${userId} AND completed_at = CURRENT_DATE
         GROUP BY battle_id
@@ -91,8 +91,12 @@ export async function completeDailyTask(battleId: string, hasImgFlag: boolean) {
   const userId = await getUserId();
   try {
     await sql`
-      INSERT INTO daily_logs (user_id, battle_id, completed_at, has_img_flag)
-      VALUES (${userId}, ${battleId}, CURRENT_DATE, ${hasImgFlag})
+      INSERT INTO daily_logs (user_id, battle_id, completed_at, has_img_flag, completed_count)
+      VALUES (${userId}, ${battleId}, CURRENT_DATE, ${hasImgFlag}, 1)
+      ON CONFLICT (user_id, battle_id, completed_at)
+      DO UPDATE SET 
+        completed_count = daily_logs.completed_count + 1,
+        has_img_flag = EXCLUDED.has_img_flag OR daily_logs.has_img_flag
     `;
     revalidatePath('/daily');
     revalidatePath('/daily/calendar');

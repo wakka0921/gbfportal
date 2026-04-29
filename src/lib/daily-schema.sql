@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     battle_id UUID NOT NULL REFERENCES multi_battles(id) ON DELETE CASCADE,
     completed_at DATE NOT NULL DEFAULT CURRENT_DATE,
     has_img_flag BOOLEAN NOT NULL DEFAULT FALSE,
+    completed_count INTEGER DEFAULT 1,
     img_url TEXT,
     UNIQUE(user_id, battle_id, completed_at) -- 同じ日に2回以上完了するのを防ぐ(1回制限の場合)
 );

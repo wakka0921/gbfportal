@@ -47,6 +47,7 @@ function NavbarContent() {
 
     const allNavItems = [...navItems];
     if (user?.adminflg === '1') {
+        allNavItems.push({ name: '団員名簿', href: '/admin/guild' });
         allNavItems.push({ name: '管理者ページ', href: '/admin' });
     }
 

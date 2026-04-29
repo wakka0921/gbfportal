@@ -5,6 +5,7 @@ import { Template } from '@/types';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
+import { getGuildSheetData } from './googleSheets';
 
 export interface PortalEvent {
     id: string;
@@ -402,5 +403,19 @@ export async function getCurrentUser() {
     } catch (error) {
         console.error('Failed to fetch user from DB:', error);
         return { id: userId, username };
+    }
+}
+export async function syncGuildData() {
+    try {
+        const user = await getCurrentUser();
+        if (user?.adminflg !== '1') return { success: false, error: 'Unauthorized' };
+
+        const data = await getGuildSheetData();
+        if (!data) return { success: false, error: 'Failed to fetch from Google Sheets. Check environment variables and sheet sharing.' };
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Failed to sync guild data:', error);
+        return { success: false, error: 'Sync failed' };
     }
 }
