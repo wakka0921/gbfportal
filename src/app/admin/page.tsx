@@ -20,10 +20,6 @@ const EVENT_COLORS = [
 
 export default function AdminDashboard() {
     const router = useRouter();
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [adminPassword, setAdminPassword] = useState('');
-    const [adminError, setAdminError] = useState('');
-
     const [masterMaterials, setMasterMaterials] = useState<any[]>([]);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [events, setEvents] = useState<any[]>([]);
@@ -35,38 +31,32 @@ export default function AdminDashboard() {
     const [templateSearchQueries, setTemplateSearchQueries] = useState<{ [key: string]: string }>({});
     const [displayLimit, setDisplayLimit] = useState<number>(50);
     const [currentPage, setCurrentPage] = useState<number>(1);
+    const [expandedTemplates, setExpandedTemplates] = useState<{ [key: string]: boolean }>({});
 
     useEffect(() => {
         setCurrentPage(1);
     }, [materialSearchQuery, displayLimit]);
 
     useEffect(() => {
-        const checkAdmin = async () => {
-            if (isAdmin) {
-                setLoading(true);
-                const [mats, temps, evs] = await Promise.all([
-                    actions.getMasterMaterials(),
-                    actions.getTemplates(),
-                    actions.getEvents()
-                ]);
-                setMasterMaterials(mats);
-                setTemplates(temps);
-                setEvents(evs);
-                setLoading(false);
+        const loadData = async () => {
+            setLoading(true);
+            const user = await actions.getCurrentUser();
+            if (user?.adminflg !== '1') {
+                router.push('/');
+                return;
             }
+            const [mats, temps, evs] = await Promise.all([
+                actions.getMasterMaterials(),
+                actions.getTemplates(),
+                actions.getEvents()
+            ]);
+            setMasterMaterials(mats);
+            setTemplates(temps);
+            setEvents(evs);
+            setLoading(false);
         };
-        checkAdmin();
-    }, [isAdmin]);
-
-    const handleAdminLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (adminPassword === 'admin') {
-            setIsAdmin(true);
-            setAdminError('');
-        } else {
-            setAdminError('パスワードが正しくありません。');
-        }
-    };
+        loadData();
+    }, [router]);
 
     const handleSaveMaterials = async () => {
         setLoading(true);
@@ -124,47 +114,7 @@ export default function AdminDashboard() {
         } : t));
     };
 
-    if (!isAdmin) {
-        return (
-            <main className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white">
-                <div className="max-w-md w-full space-y-8 bg-slate-800 p-10 rounded-3xl shadow-2xl border border-white/5">
-                    <div className="text-center space-y-2">
-                        <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <Lock size={32} />
-                        </div>
-                        <h1 className="text-2xl font-black tracking-tight">Admin Access</h1>
-                        <p className="text-slate-400 text-sm">システム設定にアクセスするにはパスワードを入力してください。</p>
-                    </div>
-
-                    <form onSubmit={handleAdminLogin} className="space-y-6">
-                        <div className="space-y-2">
-                            <input
-                                type="password"
-                                placeholder="Password"
-                                value={adminPassword}
-                                onChange={(e) => setAdminPassword(e.target.value)}
-                                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-center font-mono tracking-widest"
-                            />
-                            {adminError && <p className="text-red-400 text-xs font-bold text-center">{adminError}</p>}
-                        </div>
-                        <button
-                            type="submit"
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl shadow-xl shadow-blue-500/10 transition-all active:scale-95"
-                        >
-                            Unlock Dashboard
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => router.push('/tracker')}
-                            className="w-full text-slate-500 hover:text-slate-300 text-sm font-bold transition-colors"
-                        >
-                            Cancel
-                        </button>
-                    </form>
-                </div>
-            </main>
-        );
-    }
+    // Admin validation is handled in useEffect
 
 
 
@@ -359,7 +309,13 @@ export default function AdminDashboard() {
                         {templates.map((t, tIdx) => (
                             <div key={t.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 space-y-4">
                                 <div className="flex justify-between items-start">
-                                    <div className="flex-1 max-w-md">
+                                    <div className="flex-1 max-w-md flex items-center gap-2">
+                                        <button
+                                            onClick={() => setExpandedTemplates(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+                                            className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
+                                        >
+                                            {expandedTemplates[t.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                                        </button>
                                         <input
                                             type="text"
                                             value={t.title}
@@ -380,8 +336,9 @@ export default function AdminDashboard() {
                                     </button>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-400 tracking-widest px-2">
+                                {expandedTemplates[t.id] && (
+                                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                        <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-400 tracking-widest px-2">
                                         <span>素材</span>
                                         <span>必要数</span>
                                         <span></span>
@@ -469,7 +426,8 @@ export default function AdminDashboard() {
                                     >
                                         <Plus size={14} /> 素材を追加
                                     </button>
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -598,7 +556,7 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {loading && isAdmin && (
+            {loading && (
                 <div className="fixed inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-[100]">
                     <div className="flex flex-col items-center gap-4">
                         <RefreshCw size={48} className="text-blue-600 animate-spin" />

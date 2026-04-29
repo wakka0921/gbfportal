@@ -16,7 +16,7 @@ const navItems = [
 
 function NavbarContent() {
     const [isOpen, setIsOpen] = useState(false);
-    const [user, setUser] = useState<{ id: string, username: string } | null>(null);
+    const [user, setUser] = useState<{ id: string, username: string, adminflg?: string } | null>(null);
     const [showLogoutToast, setShowLogoutToast] = useState(false);
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -45,6 +45,11 @@ function NavbarContent() {
         window.location.href = '/?logout=true';
     };
 
+    const allNavItems = [...navItems];
+    if (user?.adminflg === '1') {
+        allNavItems.push({ name: '管理者ページ', href: '/admin' });
+    }
+
     return (
         <>
             {/* Logout Notification Toast */}
@@ -67,7 +72,7 @@ function NavbarContent() {
                     <div className="flex justify-between items-center h-16">
                         {/* Desktop Navigation */}
                         <nav className="hidden md:flex items-center space-x-2">
-                            {navItems.map((item, idx) => (
+                            {allNavItems.map((item, idx) => (
                                 <React.Fragment key={item.href}>
                                     {idx > 0 && <div className="w-px h-4 bg-slate-200 mx-2" />}
                                     <Link
@@ -129,7 +134,7 @@ function NavbarContent() {
                     className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out bg-white border-t border-slate-50 ${isOpen ? 'max-h-64' : 'max-h-0'}`}
                 >
                     <nav className="p-4 space-y-1">
-                        {navItems.map((item) => (
+                        {allNavItems.map((item) => (
                             <Link
                                 key={item.href}
                                 href={item.href}

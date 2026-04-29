@@ -60,6 +60,7 @@ export async function initDB() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
+        adminflg VARCHAR(1) DEFAULT '0',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -356,7 +357,7 @@ export async function register(username: string, password: string) {
         (await cookies()).set('user_id', user.id, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
         (await cookies()).set('username', user.username, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
 
-        return { success: true, user: { id: user.id, username: user.username } };
+        return { success: true, user: { id: user.id, username: user.username, adminflg: user.adminflg || '0' } };
     } catch (error) {
         console.error('Registration failed:', error);
         return { success: false, error: '登録に失敗しました。' };
@@ -375,7 +376,7 @@ export async function login(username: string, password: string) {
         (await cookies()).set('user_id', user.id, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
         (await cookies()).set('username', user.username, { httpOnly: true, secure: true, sameSite: 'strict', maxAge: 60 * 60 * 24 * 7 });
 
-        return { success: true, user: { id: user.id, username: user.username } };
+        return { success: true, user: { id: user.id, username: user.username, adminflg: user.adminflg || '0' } };
     } catch (error) {
         console.error('Login failed:', error);
         return { success: false, error: 'ログインに失敗しました。' };
@@ -393,5 +394,13 @@ export async function getCurrentUser() {
     const username = (await cookies()).get('username')?.value;
 
     if (!userId || !username) return null;
-    return { id: userId, username };
+
+    try {
+        const { rows } = await sql`SELECT id, username, adminflg FROM users WHERE id = ${userId}`;
+        if (rows.length === 0) return { id: userId, username }; // Fallback to cookie data if DB fetch fails
+        return { id: rows[0].id, username: rows[0].username, adminflg: rows[0].adminflg };
+    } catch (error) {
+        console.error('Failed to fetch user from DB:', error);
+        return { id: userId, username };
+    }
 }
