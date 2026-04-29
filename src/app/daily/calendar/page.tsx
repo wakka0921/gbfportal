@@ -1,6 +1,6 @@
 import React from 'react';
 import { getCalendarCompletion } from '../actions';
-import CalendarClient from './CalendarClient';
+import CalendarClient, { LogItem } from './CalendarClient';
 
 export default async function CalendarPage() {
     // 現在の月（YYYY-MM）を取得
@@ -12,5 +12,5 @@ export default async function CalendarPage() {
 
     const data = await getCalendarCompletion(targetMonth);
 
-    return <CalendarClient initialData={data} initialDateStr={targetMonth} />;
+    return <CalendarClient initialData={data as { totalConfigs: number; logs: LogItem[] }} initialDateStr={targetMonth} />;
 }

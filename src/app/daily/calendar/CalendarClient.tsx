@@ -7,7 +7,7 @@ import { ja } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, ArrowLeft, Calendar as CalendarIcon, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-type LogItem = {
+export type LogItem = {
     completed_at: string; // ISO String from DB
     completed_count: string | number;
 };
