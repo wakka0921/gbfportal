@@ -270,6 +270,22 @@ export default function GameClient() {
         isBossPending, showBossWarning, autoSellThreshold
     ]);
 
+    // Sync score to server for ranking
+    useEffect(() => {
+        if (!isLoaded || !currentUser) return;
+        
+        const syncScore = async () => {
+            try {
+                await updateGameScore(stage, dungeonTranscendence);
+            } catch (e) {
+                console.error("Failed to sync score to server", e);
+            }
+        };
+
+        const timer = setTimeout(syncScore, 2000); // Debounce sync
+        return () => clearTimeout(timer);
+    }, [stage, dungeonTranscendence, isLoaded, currentUser]);
+
     // --- Helper Logic ---
     const getNextExp = (lv: number) => Math.floor(100 * Math.pow(lv, 2.5));
     const getGachaLevelUpExp = (lv: number) => Math.floor(1000 * Math.pow(lv, 1.5));

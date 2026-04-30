@@ -458,6 +458,11 @@ export async function updateGameScore(stage: number, transcendence: number) {
         const user = await getCurrentUser();
         if (!user) return { success: false, error: 'Unauthorized' };
 
+        // Ranking requirement: Clear Stage 1 (meaning current stage is 2 or more) or have transcended
+        if (stage < 2 && transcendence === 0) {
+            return { success: true, message: 'Not eligible for ranking yet' };
+        }
+
         await sql`
             INSERT INTO game_scores (user_id, username, max_stage, transcendence_count, updated_at)
             VALUES (${user.id}, ${user.username}, ${stage}, ${transcendence}, CURRENT_TIMESTAMP)
@@ -480,6 +485,7 @@ export async function getGameRanking() {
         const { rows } = await sql`
             SELECT username, max_stage, transcendence_count
             FROM game_scores
+            WHERE max_stage >= 2 OR transcendence_count > 0
             ORDER BY transcendence_count DESC, max_stage DESC
             LIMIT 10
         `;
