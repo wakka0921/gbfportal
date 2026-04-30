@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { Menu, X, User as UserIcon, LogIn, LogOut, Bell } from 'lucide-react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Menu, X, User as UserIcon, LogIn, LogOut, Bell, Swords } from 'lucide-react';
 import * as actions from '@/lib/actions';
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
     { name: '日課リスト', href: '/daily' },
     { name: 'ヒヒ堀りツール', href: '/hihi' },
     { name: '古戦場貢献度計算機', href: '/calculator' },
+    { name: 'おまけ', href: '/game' },
 ];
 
 function NavbarContent() {
@@ -49,6 +51,78 @@ function NavbarContent() {
     if (user?.adminflg === '1') {
         allNavItems.push({ name: '団員名簿', href: '/admin/guild' });
         allNavItems.push({ name: '管理者ページ', href: '/admin' });
+    }
+
+    const pathname = usePathname();
+    const isGamePage = pathname === '/game';
+
+    if (isGamePage) {
+        return (
+            <>
+                <div className="fixed top-4 left-4 z-[60]">
+                    <button
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="p-3 bg-slate-900/80 backdrop-blur-md text-white rounded-2xl shadow-xl border border-slate-700/50 hover:bg-slate-800 transition-all active:scale-95 group"
+                        aria-label="メニューを開く"
+                    >
+                        {isOpen ? <X size={24} /> : <Menu size={24} />}
+                        <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            Menu
+                        </span>
+                    </button>
+                </div>
+
+                <AnimatePresence>
+                    {isOpen && (
+                        <div className="fixed inset-0 z-[55]">
+                            <div
+                                className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+                                onClick={() => setIsOpen(false)}
+                            />
+                            <div className="absolute top-20 left-4 w-64 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-4 space-y-2 animate-in slide-in-from-left-4 fade-in duration-300">
+                                <div className="p-4 border-b border-slate-800 mb-2">
+                                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                        <Swords size={18} className="text-blue-500" />
+                                        GBF Portal
+                                    </h3>
+                                </div>
+                                <nav className="space-y-1">
+                                    {allNavItems.map((item) => (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            onClick={() => setIsOpen(false)}
+                                            className={`block px-4 py-3 text-sm font-bold rounded-xl transition-all ${pathname === item.href
+                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                                }`}
+                                        >
+                                            {item.name}
+                                        </Link>
+                                    ))}
+                                </nav>
+                                {user && (
+                                    <div className="pt-4 border-t border-slate-800 mt-4 px-2 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                                                <UserIcon size={14} />
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-300 truncate max-w-[100px]">{user.username}</span>
+                                        </div>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="p-2 text-slate-500 hover:text-red-500 transition-colors"
+                                        >
+                                            <LogOut size={16} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </AnimatePresence>
+            </>
+        );
     }
 
     return (

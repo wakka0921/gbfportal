@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import { completeDailyTask } from './actions';
-import { CheckCircle, Settings, Calendar as CalendarIcon, Image as ImageIcon, Check } from 'lucide-react';
+import { CheckCircle, Settings, Calendar as CalendarIcon, Image as ImageIcon, Check, Ticket, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 
@@ -16,7 +16,7 @@ type TaskItem = {
     has_img_flag: boolean;
 };
 
-export default function DailyClient({ initialTasks }: { initialTasks: TaskItem[] }) {
+export default function DailyClient({ initialTasks, currentUser }: { initialTasks: TaskItem[], currentUser: any }) {
     const router = useRouter();
     const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
     const [isPending, startTransition] = useTransition();
@@ -42,6 +42,7 @@ export default function DailyClient({ initialTasks }: { initialTasks: TaskItem[]
         const isNowComplete = currentCount + 1 >= limit;
         if (isNowComplete) {
             triggerConfetti();
+            // Optional: You could add a toast here. For now, we'll rely on the game UI to show tickets.
         }
 
         startTransition(async () => {
@@ -91,6 +92,11 @@ export default function DailyClient({ initialTasks }: { initialTasks: TaskItem[]
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight">日課リスト</h1>
                     <p className="text-slate-500 font-medium mt-1">今日のグラブル日課を消化しましょう</p>
+                    {!currentUser && (
+                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-lg text-[11px] font-bold border border-red-100">
+                            <Info size={14} /> ログインすると日課チケットを獲得・保存できます
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     <button 
@@ -210,8 +216,13 @@ export default function DailyClient({ initialTasks }: { initialTasks: TaskItem[]
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="px-6 py-2.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl font-black w-full md:w-auto flex justify-center items-center gap-2">
-                                                <Check size={18} /> 達成済
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="px-6 py-2.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl font-black w-full md:w-auto flex justify-center items-center gap-2">
+                                                    <Check size={18} /> 達成済
+                                                </div>
+                                                <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1 animate-bounce mt-1">
+                                                    <Ticket size={10} /> チケット獲得！
+                                                </p>
                                             </div>
                                         )}
                                     </div>

@@ -89,6 +89,7 @@ export async function toggleUserConfig(battleId: string, isActive: boolean) {
 // 日課を完了（1カウント進める）する
 export async function completeDailyTask(battleId: string, hasImgFlag: boolean) {
   const userId = await getUserId();
+  // 1. Record the daily log
   try {
     await sql`
       INSERT INTO daily_logs (user_id, battle_id, completed_at, has_img_flag, completed_count)
@@ -98,13 +99,24 @@ export async function completeDailyTask(battleId: string, hasImgFlag: boolean) {
         completed_count = daily_logs.completed_count + 1,
         has_img_flag = EXCLUDED.has_img_flag OR daily_logs.has_img_flag
     `;
-    revalidatePath('/daily');
-    revalidatePath('/daily/calendar');
-    return { success: true };
   } catch (error) {
-    console.error('Failed to complete daily task:', error);
-    return { success: false, error: "既に完了しているか、またはエラーが発生しました。" };
+    console.error('Failed to complete daily task log:', error);
+    return { success: false, error: "日課の記録に失敗しました。" };
   }
+
+  // 2. Grant ticket (optional step, should not block completion)
+  try {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    if (isUUID) {
+      await sql`UPDATE users SET daily_tickets = COALESCE(daily_tickets, 0) + 1 WHERE id = ${userId}`;
+    }
+  } catch (error) {
+    console.error('Failed to grant daily ticket:', error);
+  }
+
+  revalidatePath('/daily');
+  revalidatePath('/daily/calendar');
+  return { success: true };
 }
 
 // カレンダー用の過去の実績取得（月を指定して、日ごとの達成率を取得）

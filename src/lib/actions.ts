@@ -62,9 +62,17 @@ export async function initDB() {
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         adminflg VARCHAR(1) DEFAULT '0',
+        daily_tickets INTEGER DEFAULT 0,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+        // Ensure daily_tickets column exists if table was created before
+        try {
+            await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_tickets INTEGER DEFAULT 0`;
+        } catch (e) {
+            console.log("daily_tickets column already exists or error adding it");
+        }
 
         await sql`
       CREATE TABLE IF NOT EXISTS goals (
@@ -83,6 +91,16 @@ export async function initDB() {
         current_count INTEGER DEFAULT 0,
         target_count INTEGER NOT NULL,
         sort_order INTEGER DEFAULT 0
+      );
+    `;
+
+        await sql`
+      CREATE TABLE IF NOT EXISTS game_scores (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        username TEXT NOT NULL,
+        max_stage INTEGER DEFAULT 1,
+        transcendence_count INTEGER DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
@@ -397,14 +415,28 @@ export async function getCurrentUser() {
     if (!userId || !username) return null;
 
     try {
-        const { rows } = await sql`SELECT id, username, adminflg FROM users WHERE id = ${userId}`;
-        if (rows.length === 0) return { id: userId, username }; // Fallback to cookie data if DB fetch fails
-        return { id: rows[0].id, username: rows[0].username, adminflg: rows[0].adminflg };
+        const { rows } = await sql`SELECT id, username, adminflg, daily_tickets FROM users WHERE id = ${userId}`;
+        if (rows.length === 0) return { id: userId, username, daily_tickets: 0 }; // Fallback to cookie data if DB fetch fails
+        return { id: rows[0].id, username: rows[0].username, adminflg: rows[0].adminflg, daily_tickets: rows[0].daily_tickets || 0 };
     } catch (error) {
         console.error('Failed to fetch user from DB:', error);
-        return { id: userId, username };
+        return { id: userId, username, daily_tickets: 0 };
     }
 }
+
+export async function consumeDailyTicket() {
+    try {
+        const user = await getCurrentUser();
+        if (!user || user.daily_tickets <= 0) return { success: false, error: 'No tickets available' };
+
+        await sql`UPDATE users SET daily_tickets = daily_tickets - 1 WHERE id = ${user.id}`;
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to consume daily ticket:', error);
+        return { success: false };
+    }
+}
+
 export async function syncGuildData() {
     try {
         const user = await getCurrentUser();
@@ -417,5 +449,55 @@ export async function syncGuildData() {
     } catch (error) {
         console.error('Failed to sync guild data:', error);
         return { success: false, error: 'Sync failed' };
+    }
+}
+
+// Game Ranking Actions
+export async function updateGameScore(stage: number, transcendence: number) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        await sql`
+            INSERT INTO game_scores (user_id, username, max_stage, transcendence_count, updated_at)
+            VALUES (${user.id}, ${user.username}, ${stage}, ${transcendence}, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                username = EXCLUDED.username,
+                max_stage = GREATEST(game_scores.max_stage, EXCLUDED.max_stage),
+                transcendence_count = GREATEST(game_scores.transcendence_count, EXCLUDED.transcendence_count),
+                updated_at = CURRENT_TIMESTAMP
+        `;
+
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to update game score:', error);
+        return { success: false };
+    }
+}
+
+export async function getGameRanking() {
+    try {
+        const { rows } = await sql`
+            SELECT username, max_stage, transcendence_count
+            FROM game_scores
+            ORDER BY transcendence_count DESC, max_stage DESC
+            LIMIT 10
+        `;
+        return rows;
+    } catch (error) {
+        console.error('Failed to fetch game ranking:', error);
+        return [];
+    }
+}
+export async function deleteGameScore() {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        await sql`DELETE FROM game_scores WHERE user_id = ${user.id}`;
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to delete game score:', error);
+        return { success: false };
     }
 }
