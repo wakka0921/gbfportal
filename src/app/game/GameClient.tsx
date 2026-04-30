@@ -20,7 +20,15 @@ import {
     TITLES
 } from './gameData';
 
-import { getCurrentUser, updateGameScore, getGameRanking, consumeDailyTicket, deleteGameScore } from '@/lib/actions';
+import { 
+    getCurrentUser, 
+    updateGameScore, 
+    getGameRanking, 
+    consumeDailyTicket, 
+    deleteGameScore,
+    saveGameData,
+    getGameData
+} from '@/lib/actions';
 
 // --- Helper Functions ---
 
@@ -161,91 +169,88 @@ export default function GameClient() {
     // --- Data Persistence ---
     const SAVE_KEY = 'gbf_portal_game_save_v1';
 
-    // Load user data
+    // Initialization: Load user and game data
     useEffect(() => {
-        const fetchUser = async () => {
+        const initGame = async () => {
+            // 1. Fetch User
             const user = await getCurrentUser();
             setCurrentUser(user);
-        };
-        fetchUser();
-    }, []);
 
-    // Sync ranking data
-    useEffect(() => {
-        if (currentUser) {
-            updateGameScore(stage, dungeonTranscendence);
-        }
-    }, [stage, dungeonTranscendence, currentUser]);
-
-    // Fetch ranking data
-    const fetchRanking = async () => {
-        const data = await getGameRanking();
-        setRanking(data as any);
-    };
-
-    useEffect(() => {
-        if (activeTab === 'stats') {
-            fetchRanking();
-        }
-    }, [activeTab]);
-
-    // Load data on mount
-    useEffect(() => {
-        const savedData = localStorage.getItem(SAVE_KEY);
-        if (savedData) {
-            try {
-                const data = JSON.parse(savedData);
-                if (data.coins !== undefined) setCoins(data.coins);
-                if (data.level !== undefined) setLevel(data.level);
-                if (data.exp !== undefined) setExp(data.exp);
-                if (data.dungeonTranscendence !== undefined) setDungeonTranscendence(data.dungeonTranscendence);
-                if (data.productionTranscendence !== undefined) setProductionTranscendence(data.productionTranscendence);
-                if (data.transcendence !== undefined && data.dungeonTranscendence === undefined) {
-                    setDungeonTranscendence(data.transcendence);
+            // 2. Determine source of save data
+            let savedDataStr = localStorage.getItem(SAVE_KEY);
+            
+            if (user) {
+                try {
+                    const serverDataStr = await getGameData();
+                    if (serverDataStr) {
+                        // If server data exists, it takes precedence for cross-device sync
+                        // (Alternatively, we could compare timestamps, but server is generally 'truth')
+                        savedDataStr = serverDataStr;
+                        console.log('Loaded save data from server.');
+                    }
+                } catch (e) {
+                    console.error('Failed to load save data from server', e);
                 }
-                if (data.stats !== undefined) setStats(data.stats);
-                if (data.facilityCounts !== undefined) setFacilityCounts(data.facilityCounts);
-                if (data.equipmentUnlocked !== undefined) setEquipmentUnlocked(data.equipmentUnlocked);
-                if (data.stage !== undefined) setStage(data.stage);
-                if (data.enemyIndex !== undefined) setEnemyIndex(data.enemyIndex);
-                if (data.inventory !== undefined) setInventory(data.inventory);
-                if (data.elements !== undefined) setElements(data.elements);
-                if (data.gachaLevel !== undefined) setGachaLevel(data.gachaLevel);
-                if (data.gachaExp !== undefined) setGachaExp(data.gachaExp);
-                if (data.equippedWeaponId !== undefined) setEquippedWeaponId(data.equippedWeaponId);
-                if (data.equippedArmorId !== undefined) setEquippedArmorId(data.equippedArmorId);
-                if (data.isBossPending !== undefined) setIsBossPending(data.isBossPending);
-                if (data.showBossWarning !== undefined) setShowBossWarning(data.showBossWarning);
-                if (data.autoSellThreshold !== undefined) setAutoSellThreshold(data.autoSellThreshold);
+            }
 
-                // Calculate Offline Earnings
-                if (data.lastSaveTime) {
-                    const elapsedSeconds = Math.floor((Date.now() - data.lastSaveTime) / 1000);
-                    if (elapsedSeconds > 60) {
-                        let savedCps = 0;
-                        if (data.facilityCounts) {
-                            FACILITIES.forEach(f => {
-                                const count = data.facilityCounts[f.id] || 0;
-                                savedCps += f.baseCps * count;
-                            });
-                        }
-                        const prodTransMult = 1 + (data.productionTranscendence || 0) * 0.5;
-                        const offlineEarnings = Math.floor(elapsedSeconds * (savedCps / 2) * prodTransMult);
+            // 3. Apply save data
+            if (savedDataStr) {
+                try {
+                    const data = JSON.parse(savedDataStr);
+                    if (data.coins !== undefined) setCoins(data.coins);
+                    if (data.level !== undefined) setLevel(data.level);
+                    if (data.exp !== undefined) setExp(data.exp);
+                    if (data.dungeonTranscendence !== undefined) setDungeonTranscendence(data.dungeonTranscendence);
+                    if (data.productionTranscendence !== undefined) setProductionTranscendence(data.productionTranscendence);
+                    if (data.transcendence !== undefined && data.dungeonTranscendence === undefined) {
+                        setDungeonTranscendence(data.transcendence);
+                    }
+                    if (data.stats !== undefined) setStats(data.stats);
+                    if (data.facilityCounts !== undefined) setFacilityCounts(data.facilityCounts);
+                    if (data.equipmentUnlocked !== undefined) setEquipmentUnlocked(data.equipmentUnlocked);
+                    if (data.stage !== undefined) setStage(data.stage);
+                    if (data.enemyIndex !== undefined) setEnemyIndex(data.enemyIndex);
+                    if (data.inventory !== undefined) setInventory(data.inventory);
+                    if (data.elements !== undefined) setElements(data.elements);
+                    if (data.gachaLevel !== undefined) setGachaLevel(data.gachaLevel);
+                    if (data.gachaExp !== undefined) setGachaExp(data.gachaExp);
+                    if (data.equippedWeaponId !== undefined) setEquippedWeaponId(data.equippedWeaponId);
+                    if (data.equippedArmorId !== undefined) setEquippedArmorId(data.equippedArmorId);
+                    if (data.isBossPending !== undefined) setIsBossPending(data.isBossPending);
+                    if (data.showBossWarning !== undefined) setShowBossWarning(data.showBossWarning);
+                    if (data.autoSellThreshold !== undefined) setAutoSellThreshold(data.autoSellThreshold);
 
-                        if (offlineEarnings > 0) {
-                            setCoins(prev => (data.coins || 0) + offlineEarnings);
-                            setTimeout(() => {
-                                addLog(`おかえりなさい！不在の間に ${formatNumber(offlineEarnings)} を獲得しました。（経過: ${Math.floor(elapsedSeconds / 60)} 分）`, 'system');
-                            }, 1000);
+                    // Calculate Offline Earnings
+                    if (data.lastSaveTime) {
+                        const elapsedSeconds = Math.floor((Date.now() - data.lastSaveTime) / 1000);
+                        if (elapsedSeconds > 60) {
+                            let savedCps = 0;
+                            if (data.facilityCounts) {
+                                FACILITIES.forEach(f => {
+                                    const count = data.facilityCounts[f.id] || 0;
+                                    savedCps += f.baseCps * count;
+                                });
+                            }
+                            const prodTransMult = 1 + (data.productionTranscendence || 0) * 0.5;
+                            const offlineEarnings = Math.floor(elapsedSeconds * (savedCps / 2) * prodTransMult);
+
+                            if (offlineEarnings > 0) {
+                                setCoins(prev => (data.coins || 0) + offlineEarnings);
+                                setTimeout(() => {
+                                    addLog(`おかえりなさい！不在の間に ${formatNumber(offlineEarnings)} を獲得しました。（経過: ${Math.floor(elapsedSeconds / 60)} 分）`, 'system');
+                                }, 1000);
+                            }
                         }
                     }
+                    addLog('セーブデータを読み込みました。', 'system');
+                } catch (e) {
+                    console.error('Failed to parse save data', e);
                 }
-                addLog('セーブデータを読み込みました。', 'system');
-            } catch (e) {
-                console.error('Failed to load save data', e);
             }
-        }
-        setIsLoaded(true);
+            setIsLoaded(true);
+        };
+
+        initGame();
     }, []);
 
     // Save data whenever relevant state changes
@@ -271,21 +276,53 @@ export default function GameClient() {
         isBossPending, showBossWarning, autoSellThreshold
     ]);
 
-    // Sync score to server for ranking
+    // Sync ranking data and game save to server
     useEffect(() => {
         if (!isLoaded || !currentUser) return;
         
-        const syncScore = async () => {
+        const syncToServer = async () => {
             try {
+                // 1. Sync Score (Ranking)
                 await updateGameScore(stage, dungeonTranscendence);
+
+                // 2. Sync Full Save Data
+                const dataToSave = {
+                    coins, level, exp, dungeonTranscendence, productionTranscendence, stats,
+                    facilityCounts, equipmentUnlocked, stage,
+                    enemyIndex, inventory, elements,
+                    gachaLevel, gachaExp,
+                    equippedWeaponId, equippedArmorId,
+                    isBossPending, showBossWarning, autoSellThreshold,
+                    lastSaveTime: Date.now()
+                };
+                await saveGameData(JSON.stringify(dataToSave));
+                
+                console.log('Synced game data to server.');
             } catch (e) {
-                console.error("Failed to sync score to server", e);
+                console.error("Failed to sync to server", e);
             }
         };
 
-        const timer = setTimeout(syncScore, 2000); // Debounce sync
+        const timer = setTimeout(syncToServer, 5000); // Debounce sync (5 seconds for full save)
         return () => clearTimeout(timer);
-    }, [stage, dungeonTranscendence, isLoaded, currentUser]);
+    }, [
+        isLoaded, currentUser, stage, dungeonTranscendence, coins, level, exp, productionTranscendence, stats,
+        facilityCounts, equipmentUnlocked, enemyIndex, inventory, elements,
+        gachaLevel, gachaExp, equippedWeaponId, equippedArmorId,
+        isBossPending, showBossWarning, autoSellThreshold
+    ]);
+
+    // Fetch ranking data separately when tab is active
+    const fetchRanking = async () => {
+        const data = await getGameRanking();
+        setRanking(data as any);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'stats') {
+            fetchRanking();
+        }
+    }, [activeTab]);
 
     // --- Helper Logic ---
     const getNextExp = (lv: number) => Math.floor(100 * Math.pow(lv, 2.5));

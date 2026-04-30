@@ -104,6 +104,14 @@ export async function initDB() {
       );
     `;
 
+        await sql`
+      CREATE TABLE IF NOT EXISTS game_saves (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        save_data TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
         return { success: true };
     } catch (error) {
         console.error('Failed to init DB:', error);
@@ -505,5 +513,39 @@ export async function deleteGameScore() {
     } catch (error) {
         console.error('Failed to delete game score:', error);
         return { success: false };
+    }
+}
+
+// Game Save Actions
+export async function saveGameData(saveData: string) {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return { success: false, error: 'Unauthorized' };
+
+        await sql`
+            INSERT INTO game_saves (user_id, save_data, updated_at)
+            VALUES (${user.id}, ${saveData}, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                save_data = EXCLUDED.save_data,
+                updated_at = CURRENT_TIMESTAMP
+        `;
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to save game data:', error);
+        return { success: false, error: 'Failed to save data to database' };
+    }
+}
+
+export async function getGameData() {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return null;
+
+        const { rows } = await sql`SELECT save_data FROM game_saves WHERE user_id = ${user.id}`;
+        if (rows.length === 0) return null;
+        return rows[0].save_data;
+    } catch (error) {
+        console.error('Failed to fetch game data:', error);
+        return null;
     }
 }
