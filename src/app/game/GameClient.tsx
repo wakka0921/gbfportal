@@ -155,6 +155,7 @@ export default function GameClient() {
     const [showBossWarning, setShowBossWarning] = useState(false);
     const [autoSellThreshold, setAutoSellThreshold] = useState<Rarity | 'None'>('None');
     const [mobileTab, setMobileTab] = useState<'clicker' | 'dungeon' | 'upgrades'>('dungeon');
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // --- Derived State (Multipliers) ---
     const dungeonTransMult = 1 + dungeonTranscendence * 0.5;
@@ -276,7 +277,7 @@ export default function GameClient() {
         isBossPending, showBossWarning, autoSellThreshold
     ]);
 
-    // Sync ranking data and game save to server
+    // Sync ranking data and game save to server (Debounced and Periodic)
     useEffect(() => {
         if (!isLoaded || !currentUser) return;
         
@@ -303,10 +304,39 @@ export default function GameClient() {
             }
         };
 
-        const timer = setTimeout(syncToServer, 5000); // Debounce sync (5 seconds for full save)
+        // Trigger sync on important changes, but debounce it
+        // Note: 'coins' and 'exp' are intentionally excluded from the dependency array 
+        // to prevent the timer from being reset every second by idle income.
+        const timer = setTimeout(syncToServer, 10000); // 10 second debounce
         return () => clearTimeout(timer);
     }, [
-        isLoaded, currentUser, stage, dungeonTranscendence, coins, level, exp, productionTranscendence, stats,
+        isLoaded, currentUser, stage, dungeonTranscendence, level, productionTranscendence, stats,
+        facilityCounts, equipmentUnlocked, enemyIndex, inventory, elements,
+        gachaLevel, gachaExp, equippedWeaponId, equippedArmorId,
+        isBossPending, showBossWarning, autoSellThreshold
+    ]);
+
+    // Periodic Sync (Every 60 seconds) to ensure coins/exp are eventually saved
+    useEffect(() => {
+        if (!isLoaded || !currentUser) return;
+
+        const interval = setInterval(async () => {
+            const dataToSave = {
+                coins, level, exp, dungeonTranscendence, productionTranscendence, stats,
+                facilityCounts, equipmentUnlocked, stage,
+                enemyIndex, inventory, elements,
+                gachaLevel, gachaExp,
+                equippedWeaponId, equippedArmorId,
+                isBossPending, showBossWarning, autoSellThreshold,
+                lastSaveTime: Date.now()
+            };
+            await saveGameData(JSON.stringify(dataToSave));
+            console.log('Periodic sync to server completed.');
+        }, 60000);
+
+        return () => clearInterval(interval);
+    }, [
+        isLoaded, currentUser, coins, level, exp, stage, dungeonTranscendence, productionTranscendence, stats,
         facilityCounts, equipmentUnlocked, enemyIndex, inventory, elements,
         gachaLevel, gachaExp, equippedWeaponId, equippedArmorId,
         isBossPending, showBossWarning, autoSellThreshold
@@ -520,6 +550,31 @@ export default function GameClient() {
         setGachaLevel(prev => prev + 1);
         setGachaExp(0);
         addLog(`ガチャレベルを ${gachaLevel + 1} にアップグレードしました！`, 'system');
+    };
+
+    const handleManualSave = async () => {
+        if (!currentUser) return;
+        
+        setIsSyncing(true);
+        try {
+            const dataToSave = {
+                coins, level, exp, dungeonTranscendence, productionTranscendence, stats,
+                facilityCounts, equipmentUnlocked, stage,
+                enemyIndex, inventory, elements,
+                gachaLevel, gachaExp,
+                equippedWeaponId, equippedArmorId,
+                isBossPending, showBossWarning, autoSellThreshold,
+                lastSaveTime: Date.now()
+            };
+            const res = await saveGameData(JSON.stringify(dataToSave));
+            if (res.success) {
+                addLog('クラウド保存が完了しました。', 'system');
+            }
+        } catch (e) {
+            console.error("Manual save failed", e);
+        } finally {
+            setIsSyncing(false);
+        }
     };
 
     const resetGameData = async () => {
@@ -1701,6 +1756,38 @@ export default function GameClient() {
 
                         {activeTab === 'stats' && (
                             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                                {/* User Info & Cloud Sync */}
+                                <div className="bg-slate-900/60 p-5 rounded-3xl border border-slate-800 shadow-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                                <Database size={24} />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ログイン中のユーザー</p>
+                                                <h3 className="text-xl font-black text-white">{currentUser?.username || 'ゲストユーザー'}</h3>
+                                            </div>
+                                        </div>
+                                        {currentUser && (
+                                            <button 
+                                                onClick={handleManualSave}
+                                                disabled={isSyncing}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isSyncing ? 'bg-slate-800 text-slate-500' : 'bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white'}`}
+                                            >
+                                                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                                                {isSyncing ? '保存中...' : 'クラウド保存'}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {!currentUser && (
+                                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                                            <p className="text-[9px] font-bold text-amber-500 leading-relaxed">
+                                                ※ ログインしていないため、データはブラウザにのみ保存されます。端末をまたいで同期するにはログインが必要です。
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* Character Overview Card */}
                                 <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-6">
                                     <div className="flex justify-between items-start">
