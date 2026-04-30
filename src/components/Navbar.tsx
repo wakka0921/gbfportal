@@ -24,6 +24,9 @@ function NavbarContent() {
     const router = useRouter();
 
     useEffect(() => {
+        const handleOpenMenu = () => setIsOpen(true);
+        window.addEventListener('openGameMenu', handleOpenMenu);
+
         const checkUser = async () => {
             const currentUser = await actions.getCurrentUser();
             setUser(currentUser);
@@ -38,8 +41,12 @@ function NavbarContent() {
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
             }, 1000);
-            return () => clearTimeout(timer);
+            return () => {
+                clearTimeout(timer);
+                window.removeEventListener('openGameMenu', handleOpenMenu);
+            };
         }
+        return () => window.removeEventListener('openGameMenu', handleOpenMenu);
     }, [searchParams]);
 
     const handleLogout = async () => {
@@ -59,7 +66,8 @@ function NavbarContent() {
     if (isGamePage) {
         return (
             <>
-                <div className="fixed top-4 left-4 z-[60]">
+                {/* Fixed Menu Button (Desktop Only) */}
+                <div className="hidden lg:block fixed top-4 left-4 z-[60]">
                     <button
                         onClick={() => setIsOpen(!isOpen)}
                         className="p-3 bg-slate-900/80 backdrop-blur-md text-white rounded-2xl shadow-xl border border-slate-700/50 hover:bg-slate-800 transition-all active:scale-95 group"
@@ -79,7 +87,7 @@ function NavbarContent() {
                                 className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
                                 onClick={() => setIsOpen(false)}
                             />
-                            <div className="absolute top-20 left-4 w-64 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-4 space-y-2 animate-in slide-in-from-left-4 fade-in duration-300">
+                            <div className="absolute top-20 left-4 w-64 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-4 space-y-2 animate-in slide-in-from-left-4 fade-in duration-300 max-h-[calc(100vh-100px)] overflow-y-auto custom-scrollbar">
                                 <div className="p-4 border-b border-slate-800 mb-2">
                                     <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
                                         <Swords size={18} className="text-blue-500" />
@@ -206,7 +214,7 @@ function NavbarContent() {
 
                 {/* Mobile Navigation Dropdown */}
                 <div
-                    className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out bg-white border-t border-slate-50 ${isOpen ? 'max-h-64' : 'max-h-0'}`}
+                    className={`md:hidden transition-all duration-300 ease-in-out bg-white border-t border-slate-50 ${isOpen ? 'max-h-[80vh] overflow-y-auto' : 'max-h-0 overflow-hidden'}`}
                 >
                     <nav className="p-4 space-y-1">
                         {allNavItems.map((item) => (

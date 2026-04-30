@@ -146,6 +146,7 @@ export default function GameClient() {
     const [isLoaded, setIsLoaded] = useState(false);
     const [showBossWarning, setShowBossWarning] = useState(false);
     const [autoSellThreshold, setAutoSellThreshold] = useState<Rarity | 'None'>('None');
+    const [mobileTab, setMobileTab] = useState<'clicker' | 'dungeon' | 'upgrades'>('dungeon');
 
     // --- Derived State (Multipliers) ---
     const dungeonTransMult = 1 + dungeonTranscendence * 0.5;
@@ -873,8 +874,9 @@ export default function GameClient() {
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 blur-[120px] rounded-full animate-pulse delay-700" />
             </div>
 
-            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 h-screen">
-                <div className="lg:col-span-3 border-r border-slate-800/50 bg-slate-950/40 backdrop-blur-xl p-3 flex flex-col items-center justify-between h-full">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 min-h-screen lg:h-screen lg:overflow-hidden pb-16 lg:pb-0">
+                {/* --- LEFT COLUMN: RESOURCES (Sidebar) --- */}
+                <div className={`lg:col-span-3 border-b lg:border-b-0 lg:border-r border-slate-800/50 bg-slate-950/40 backdrop-blur-xl p-3 flex-col items-center justify-between lg:h-full lg:overflow-y-auto custom-scrollbar ${mobileTab === 'clicker' ? 'flex' : 'hidden lg:flex'}`}>
                     <div className="w-full space-y-3">
                         <header
                             className="p-4 border-b border-slate-900 flex flex-col gap-3 relative overflow-hidden bg-slate-900/20 backdrop-blur-sm cursor-pointer select-none"
@@ -950,7 +952,7 @@ export default function GameClient() {
                 </div>
 
                 {/* --- CENTER COLUMN: DUNGEON --- */}
-                <div className="lg:col-span-5 flex flex-col relative overflow-hidden bg-gradient-to-b from-slate-950 to-[#0c1222] h-full">
+                <div className={`lg:col-span-5 flex-col relative overflow-hidden bg-gradient-to-b from-slate-950 to-[#0c1222] min-h-[500px] lg:h-full ${mobileTab === 'dungeon' ? 'flex' : 'hidden lg:flex'}`}>
                     <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
 
                     <header className="p-4 flex items-center justify-between relative z-10">
@@ -994,6 +996,15 @@ export default function GameClient() {
                                 ボスに挑戦する
                             </motion.button>
                         )}
+
+                        {/* Mobile Menu Button */}
+                        <button
+                            onClick={() => window.dispatchEvent(new Event('openGameMenu'))}
+                            className="lg:hidden p-2 bg-slate-800/80 backdrop-blur-md text-slate-300 hover:text-white hover:bg-slate-700 rounded-xl border border-slate-700/50 shadow-md transition-colors"
+                            aria-label="メニューを開く"
+                        >
+                            <Menu size={20} />
+                        </button>
                     </header>
 
                     {/* Player Dashboard (Moved from sidebar) */}
@@ -1062,7 +1073,7 @@ export default function GameClient() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
-                                    className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm"
+                                    className="absolute inset-0 z-50 hidden lg:flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm"
                                 >
                                     <motion.div
                                         initial={{ scale: 0.8, y: 20 }}
@@ -1211,7 +1222,7 @@ export default function GameClient() {
                 </div>
 
                 {/* --- RIGHT COLUMN: UPGRADES --- */}
-                <div className="lg:col-span-4 border-l border-slate-800/50 bg-slate-950/40 backdrop-blur-xl flex flex-col h-full overflow-hidden relative">
+                <div className={`lg:col-span-4 border-l border-slate-800/50 bg-slate-950/40 backdrop-blur-xl flex-col h-full overflow-hidden relative ${mobileTab === 'upgrades' ? 'flex' : 'hidden lg:flex'}`}>
                     {/* Equip Result Popup */}
                     <AnimatePresence>
                         {equipPopup && (
@@ -1303,7 +1314,7 @@ export default function GameClient() {
                         </div>
                         <button
                             onClick={() => { if (currentUser?.username === 'debug') setShowDebug(!showDebug); }}
-                            className={`p-2 rounded-lg transition-colors ${showDebug ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}`}
+                            className={`hidden lg:block p-2 rounded-lg transition-colors ${showDebug ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}`}
                         >
                             <Settings size={16} />
                         </button>
@@ -1979,6 +1990,93 @@ export default function GameClient() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* Global Mobile Elements (Boss Popup & Floating Clicker) */}
+            <div className="lg:hidden">
+                {/* Mobile Floating Clicker (Only on Dungeon Tab) */}
+                {mobileTab === 'dungeon' && (
+                    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[45] pointer-events-auto">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleManualClick}
+                            className="relative w-20 h-20 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_30px_-5px_rgba(245,158,11,0.5)] flex items-center justify-center group border-2 border-amber-300/50"
+                        >
+                            <div className="absolute inset-0 rounded-full border-2 border-white/10 group-hover:border-white/20 transition-colors" />
+                            <div className="absolute inset-1.5 rounded-full border border-white/5 animate-spin-slow" />
+                            <Coins size={36} className="text-white group-hover:rotate-12 transition-transform duration-300" />
+                            <div className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-lg border border-red-400/50">
+                                +{formatNumber(Math.floor(clickPower * prodTransMult))}
+                            </div>
+                        </motion.button>
+                    </div>
+                )}
+
+                {/* Mobile Boss Alert Overlay */}
+                <AnimatePresence>
+                    {isBossPending && !bossChallenging && showBossWarning && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.8, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                className="w-full max-w-sm bg-slate-900 border-2 border-red-500 rounded-3xl p-8 text-center space-y-6 shadow-[0_0_50px_rgba(239,68,68,0.3)]"
+                            >
+                                <div className="inline-flex p-4 bg-red-500/20 rounded-full text-red-500 animate-pulse">
+                                    <Skull size={48} />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="text-3xl font-black text-white tracking-tighter">WARNING</h3>
+                                    <p className="text-sm font-bold text-slate-400">第 {stage} 層の守護者が出現しました。</p>
+                                </div>
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={handleBossChallenge}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl shadow-red-900/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                        ボスに挑戦する
+                                    </button>
+                                    <button
+                                        onClick={handleBossRetreat}
+                                        className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-black text-sm uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] border border-slate-700"
+                                    >
+                                        フィールドに戻る
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* Mobile Bottom Navigation */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 z-50 flex items-center justify-around px-2 pb-safe">
+                <button 
+                    onClick={() => setMobileTab('clicker')} 
+                    className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'clicker' ? 'text-amber-500' : 'text-slate-500'}`}
+                >
+                    <Coins size={20} />
+                    <span className="text-[10px] font-bold">資源</span>
+                </button>
+                <button 
+                    onClick={() => setMobileTab('dungeon')} 
+                    className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'dungeon' ? 'text-blue-500' : 'text-slate-500'}`}
+                >
+                    <Sword size={20} />
+                    <span className="text-[10px] font-bold">戦闘</span>
+                </button>
+                <button 
+                    onClick={() => setMobileTab('upgrades')} 
+                    className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'upgrades' ? 'text-purple-500' : 'text-slate-500'}`}
+                >
+                    <Settings size={20} />
+                    <span className="text-[10px] font-bold">強化</span>
+                </button>
             </div>
 
             {/* Custom Styles */}
