@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { mockDB } from '@/lib/db';
 import { Template, Material } from '@/types';
-import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon, RefreshCw, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronLeft, Plus, Save, Trash2, Settings, Database, FileText, Lock, Calendar as CalendarIcon, RefreshCw, Search, ChevronDown, ChevronRight, Users as UsersIcon } from 'lucide-react';
 import * as actions from '@/lib/actions';
 
 const EVENT_COLORS = [
@@ -23,6 +23,7 @@ export default function AdminDashboard() {
     const [masterMaterials, setMasterMaterials] = useState<any[]>([]);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [events, setEvents] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
     const [initializing, setInitializing] = useState(false);
@@ -45,14 +46,16 @@ export default function AdminDashboard() {
                 router.push('/');
                 return;
             }
-            const [mats, temps, evs] = await Promise.all([
+            const [mats, temps, evs, usrList] = await Promise.all([
                 actions.getMasterMaterials(),
                 actions.getTemplates(),
-                actions.getEvents()
+                actions.getEvents(),
+                actions.getUsers()
             ]);
             setMasterMaterials(mats);
             setTemplates(temps);
             setEvents(evs);
+            setUsers(usrList);
             setLoading(false);
         };
         loadData();
@@ -78,6 +81,21 @@ export default function AdminDashboard() {
         setLoading(true);
         await actions.saveEvents(events);
         setSuccess('イベント設定を保存しました。');
+        setLoading(false);
+        setTimeout(() => setSuccess(''), 3000);
+    };
+
+    const handleDeleteUser = async (userId: string, username: string) => {
+        if (!confirm(`ユーザー「${username}」を完全に削除しますか？\nこの操作は取り消せません。`)) return;
+        
+        setLoading(true);
+        const res = await actions.deleteUserAccount(userId);
+        if (res.success) {
+            setUsers(users.filter(u => u.id !== userId));
+            setSuccess(`ユーザー「${username}」を削除しました。`);
+        } else {
+            alert(res.error || '削除に失敗しました。');
+        }
         setLoading(false);
         setTimeout(() => setSuccess(''), 3000);
     };
@@ -439,6 +457,68 @@ export default function AdminDashboard() {
                         >
                             <Save size={24} /> 全テンプレート内容を保存
                         </button>
+                    </div>
+                </section>
+
+                <hr className="border-slate-200" />
+
+                <section className="space-y-6">
+                    <header className="flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-black flex items-center gap-2">
+                                <UsersIcon className="text-emerald-500" />
+                                ユーザーアカウント管理
+                            </h2>
+                            <p className="text-slate-500 text-sm font-medium">登録済みユーザーの管理と削除（物理削除）</p>
+                        </div>
+                    </header>
+
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left min-w-[700px]">
+                                <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                    <tr>
+                                        <th className="px-6 py-4">ユーザー名</th>
+                                        <th className="px-6 py-4">権限</th>
+                                        <th className="px-6 py-4">所持チケット</th>
+                                        <th className="px-6 py-4">作成日</th>
+                                        <th className="px-6 py-4 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {users.map((u) => (
+                                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-slate-800">{u.username}</span>
+                                                    {u.username === 'debug' && <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Master</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${u.adminflg === '1' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                    {u.adminflg === '1' ? 'ADMIN' : 'USER'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 font-bold text-slate-600">
+                                                {u.dailyTickets} 枚
+                                            </td>
+                                            <td className="px-6 py-4 text-xs text-slate-400">
+                                                {new Date(u.createdAt).toLocaleDateString()}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button
+                                                    onClick={() => handleDeleteUser(u.id, u.username)}
+                                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                                    title="アカウントを完全に削除"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
 

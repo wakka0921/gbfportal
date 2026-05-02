@@ -112,10 +112,52 @@ export async function initDB() {
       );
     `;
 
+        await sql`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
         return { success: true };
     } catch (error) {
         console.error('Failed to init DB:', error);
         return { success: false, error };
+    }
+}
+
+// Announcements
+export async function getAnnouncements() {
+    try {
+        const { rows } = await sql`SELECT * FROM announcements ORDER BY created_at DESC LIMIT 20`;
+        return rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            createdAt: r.created_at
+        }));
+    } catch (error) {
+        console.error('Failed to fetch announcements:', error);
+        return [];
+    }
+}
+
+export async function createAnnouncement(title: string, content: string) {
+    try {
+        const user = await getCurrentUser();
+        if (user?.username !== 'debug') return { success: false, error: 'Unauthorized' };
+
+        await sql`
+            INSERT INTO announcements (title, content)
+            VALUES (${title}, ${content})
+        `;
+        revalidatePath('/');
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to create announcement:', error);
+        return { success: false, error: 'Database insertion failed' };
     }
 }
 
@@ -547,5 +589,88 @@ export async function getGameData() {
     } catch (error) {
         console.error('Failed to fetch game data:', error);
         return null;
+    }
+}
+
+export async function getGameDataByUsername(targetUsername: string) {
+    try {
+        const user = await getCurrentUser();
+        if (user?.username !== 'debug') return null;
+
+        const { rows } = await sql`
+            SELECT s.save_data 
+            FROM game_saves s
+            JOIN users u ON s.user_id = u.id
+            WHERE u.username = ${targetUsername}
+        `;
+        if (rows.length === 0) return null;
+        return rows[0].save_data;
+    } catch (error) {
+        console.error('Failed to fetch game data by username:', error);
+        return null;
+    }
+}
+
+export async function updateGameDataByUsername(targetUsername: string, saveData: string) {
+    try {
+        const user = await getCurrentUser();
+        if (user?.username !== 'debug') return { success: false, error: 'Unauthorized' };
+
+        const { rows: userRows } = await sql`SELECT id FROM users WHERE username = ${targetUsername}`;
+        if (userRows.length === 0) return { success: false, error: 'User not found' };
+        const targetUserId = userRows[0].id;
+
+        await sql`
+            INSERT INTO game_saves (user_id, save_data, updated_at)
+            VALUES (${targetUserId}, ${saveData}, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                save_data = EXCLUDED.save_data,
+                updated_at = CURRENT_TIMESTAMP
+        `;
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to update game data by username:', error);
+        return { success: false, error: 'Database update failed' };
+    }
+}
+
+// User Management (Admin Only)
+export async function getUsers() {
+    try {
+        const user = await getCurrentUser();
+        if (user?.adminflg !== '1') return [];
+
+        const { rows } = await sql`
+            SELECT id, username, adminflg, daily_tickets, created_at 
+            FROM users 
+            ORDER BY created_at DESC
+        `;
+        return rows.map(r => ({
+            id: r.id,
+            username: r.username,
+            adminflg: r.adminflg,
+            dailyTickets: r.daily_tickets,
+            createdAt: r.created_at
+        }));
+    } catch (error) {
+        console.error('Failed to fetch users:', error);
+        return [];
+    }
+}
+
+export async function deleteUserAccount(userId: string) {
+    try {
+        const user = await getCurrentUser();
+        if (user?.adminflg !== '1') return { success: false, error: 'Unauthorized' };
+
+        // Prevent self-deletion if needed, or allow it with caution
+        if (user.id === userId) return { success: false, error: '自分自身を削除することはできません。' };
+
+        await sql`DELETE FROM users WHERE id = ${userId}`;
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to delete user:', error);
+        return { success: false, error: '削除に失敗しました。' };
     }
 }

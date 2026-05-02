@@ -27,7 +27,11 @@ import {
     consumeDailyTicket, 
     deleteGameScore,
     saveGameData,
-    getGameData
+    getGameData,
+    getGameDataByUsername,
+    updateGameDataByUsername,
+    getAnnouncements,
+    createAnnouncement
 } from '@/lib/actions';
 
 // --- Helper Functions ---
@@ -37,14 +41,35 @@ const getGachaWeights = (level: number): Record<Rarity, number> => {
     const base = { ...RARITY_CONFIG };
     const weights = {} as Record<Rarity, number>;
 
+    const thresholds: Record<Rarity, number> = {
+        'N': 1, 'UC': 1, 'R': 1, 'HR': 1,
+        'SR': 3,
+        'SSR': 5,
+        'SSSR': 7,
+        'LEGEND': 10,
+        'GOD': 15,
+        'GOD+': 20
+    };
+
     RARITIES.forEach((r, idx) => {
         const config = base[r];
+        if (level < thresholds[r]) {
+            weights[r] = 0;
+            return;
+        }
         // As level increases, higher rarities get weight boosts
-        const bonus = Math.pow(1.5, level - 1) * (idx > 4 ? idx - 4 : 0.1);
+        const bonus = Math.pow(2.2, level - thresholds[r]) * (idx > 4 ? idx - 4 : 0.1);
         weights[r] = config.baseWeight + bonus;
     });
 
     return weights;
+};
+
+const getGachaLevelUpExp = (level: number) => {
+    if (level < 5) return Math.floor(100 * Math.pow(1.3, level - 1));
+    if (level < 9) return Math.floor(300 * Math.pow(1.8, level - 5));
+    if (level === 9) return 5000; // Wall to Lv.10
+    return Math.floor(5000 * Math.pow(2.2, level - 10)); // Sharp increase
 };
 
 interface GachaItem {
@@ -62,9 +87,12 @@ interface GachaItem {
 // --- Helper Functions ---
 
 const formatNumber = (num: number) => {
-    const floorNum = Math.floor(num);
-    if (floorNum < 10000) return floorNum.toLocaleString('ja-JP') + ' 円';
+    const displayNum = Math.floor(num * 10) / 10;
+    if (displayNum < 10000) {
+        return displayNum.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' 円';
+    }
 
+    const floorNum = Math.floor(displayNum);
     const units = [
         { value: 1e16, unit: '京' },
         { value: 1e12, unit: '兆' },
@@ -138,7 +166,7 @@ export default function GameClient() {
     const [isBossPending, setIsBossPending] = useState(false);
     const [bossChallenging, setBossChallenging] = useState(false);
     const [battleLogs, setBattleLogs] = useState<{ msg: string, type: 'player' | 'enemy' | 'system' }[]>([]);
-    const [activeTab, setActiveTab] = useState<'facility' | 'equipment' | 'stats' | 'gacha' | 'inventory' | 'ranking'>('facility');
+    const [activeTab, setActiveTab] = useState<'facility' | 'equipment' | 'stats' | 'gacha' | 'inventory' | 'ranking' | 'announcements'>('facility');
     const [inventory, setInventory] = useState<GachaItem[]>([]);
     const [elements, setElements] = useState({ weapon: 0, armor: 0 });
     const [gachaLevel, setGachaLevel] = useState(1);
@@ -156,6 +184,14 @@ export default function GameClient() {
     const [autoSellThreshold, setAutoSellThreshold] = useState<Rarity | 'None'>('None');
     const [mobileTab, setMobileTab] = useState<'clicker' | 'dungeon' | 'upgrades'>('dungeon');
     const [isSyncing, setIsSyncing] = useState(false);
+    const [debugEditingUser, setDebugEditingUser] = useState<string | null>(null);
+    const [debugEditingData, setDebugEditingData] = useState<any>(null);
+    const [isDebugSaving, setIsDebugSaving] = useState(false);
+    const [announcements, setAnnouncements] = useState<any[]>([]);
+    const [lastReadAnnouncementId, setLastReadAnnouncementId] = useState<string | null>(null);
+    const [newAnnouncementTitle, setNewAnnouncementTitle] = useState('');
+    const [newAnnouncementContent, setNewAnnouncementContent] = useState('');
+    const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
 
     // --- Derived State (Multipliers) ---
     const dungeonTransMult = 1 + dungeonTranscendence * 0.5;
@@ -233,7 +269,7 @@ export default function GameClient() {
                                 });
                             }
                             const prodTransMult = 1 + (data.productionTranscendence || 0) * 0.5;
-                            const offlineEarnings = Math.floor(elapsedSeconds * (savedCps / 2) * prodTransMult);
+                            const offlineEarnings = Math.floor(elapsedSeconds * (savedCps / 2) * prodTransMult * 10) / 10;
 
                             if (offlineEarnings > 0) {
                                 setCoins(prev => (data.coins || 0) + offlineEarnings);
@@ -276,6 +312,24 @@ export default function GameClient() {
         equippedWeaponId, equippedArmorId,
         isBossPending, showBossWarning, autoSellThreshold
     ]);
+
+    useEffect(() => {
+        const fetchAnnouncements = async () => {
+            const data = await getAnnouncements();
+            setAnnouncements(data);
+            const lastRead = localStorage.getItem('lastReadAnnouncementId');
+            setLastReadAnnouncementId(lastRead);
+        };
+        fetchAnnouncements();
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'announcements' && announcements.length > 0) {
+            const latestId = announcements[0].id;
+            localStorage.setItem('lastReadAnnouncementId', latestId);
+            setLastReadAnnouncementId(latestId);
+        }
+    }, [activeTab, announcements]);
 
     // Sync ranking data and game save to server (Debounced and Periodic)
     useEffect(() => {
@@ -356,7 +410,6 @@ export default function GameClient() {
 
     // --- Helper Logic ---
     const getNextExp = (lv: number) => Math.floor(100 * Math.pow(lv, 2.5));
-    const getGachaLevelUpExp = (lv: number) => Math.floor(1000 * Math.pow(lv, 1.5));
 
     const equippedWeapon = inventory.find(i => i.id === equippedWeaponId);
     const equippedArmor = inventory.find(i => i.id === equippedArmorId);
@@ -455,101 +508,145 @@ export default function GameClient() {
         }
     };
 
-    const handleGacha = () => {
-        const COST = 500 * gachaLevel; // Scaling cost
-        if (coins < COST) return;
-        setCoins(prev => prev - COST);
+    const handleGacha = (count: number = 1) => {
+        let currentCoins = coins;
+        let currentGachaLevel = gachaLevel;
+        let currentGachaExp = gachaExp;
+        
+        const itemsToAdd: GachaItem[] = [];
+        const elementGains = { weapon: 0, armor: 0 };
+        let lastItem: GachaItem | null = null;
+        let totalPulls = 0;
+        let leveledUp = false;
 
-        const weights = getGachaWeights(gachaLevel);
-        const totalWeight = Object.values(weights).reduce((acc, w) => acc + w, 0);
+        for (let i = 0; i < count; i++) {
+            const COST = 500 * Math.pow(1.5, currentGachaLevel - 1);
+            if (currentCoins < COST) break;
+            
+            currentCoins -= COST;
+            totalPulls++;
 
-        let rand = Math.random() * totalWeight;
-        let selectedRarity: Rarity = 'N';
+            const weights = getGachaWeights(currentGachaLevel);
+            const totalWeight = Object.values(weights).reduce((acc, w) => acc + w, 0);
 
-        for (const r of RARITIES) {
-            const w = weights[r];
-            if (rand < w) {
-                selectedRarity = r;
-                break;
+            let rand = Math.random() * totalWeight;
+            let selectedRarity: Rarity = 'N';
+            for (const r of RARITIES) {
+                const w = weights[r];
+                if (rand < w) {
+                    selectedRarity = r;
+                    break;
+                }
+                rand -= w;
             }
-            rand -= w;
+
+            const type = Math.random() > 0.5 ? 'weapon' : 'armor';
+            const namePool = type === 'weapon' ? WEAPON_POOL[selectedRarity] : ARMOR_POOL[selectedRarity];
+            const name = namePool[Math.floor(Math.random() * namePool.length)];
+
+            const rarityIdx = RARITIES.indexOf(selectedRarity) + 1;
+            const basePower = rarityIdx * 10 * Math.pow(1.2, currentGachaLevel - 1);
+            const getVariance = () => 0.8 + Math.random() * 0.4;
+
+            let finalAtk = Math.floor(basePower * getVariance());
+            let finalDef = Math.floor(basePower * getVariance());
+            let finalHp = Math.floor(basePower * getVariance() * 2);
+
+            if (type === 'weapon') {
+                finalAtk = Math.floor(finalAtk * 1.5);
+                finalDef = Math.floor(finalDef * 0.5);
+                finalHp = Math.floor(finalHp * 0.8);
+            } else {
+                finalAtk = Math.floor(finalAtk * 0.5);
+                finalDef = Math.floor(finalDef * 1.5);
+                finalHp = Math.floor(finalHp * 2.0);
+            }
+
+            const newItem: GachaItem = {
+                id: Math.random().toString(36).substr(2, 9),
+                name,
+                type,
+                rarity: selectedRarity,
+                level: 1,
+                unlimit: 0,
+                atk: finalAtk,
+                def: finalDef,
+                hp: finalHp
+            };
+            lastItem = newItem;
+
+            const thresholdIdx = autoSellThreshold === 'None' ? -1 : RARITIES.indexOf(autoSellThreshold);
+            const currentIdx = RARITIES.indexOf(selectedRarity);
+
+            if (currentIdx <= thresholdIdx) {
+                elementGains[type] += (currentIdx + 1) * 5;
+            } else {
+                itemsToAdd.push(newItem);
+            }
+
+            currentGachaExp += 1;
+            if (currentGachaExp >= getGachaLevelUpExp(currentGachaLevel)) {
+                currentGachaExp = 0;
+                currentGachaLevel += 1;
+                leveledUp = true;
+            }
         }
 
-        const type = Math.random() > 0.5 ? 'weapon' : 'armor';
-        const namePool = type === 'weapon' ? WEAPON_POOL[selectedRarity] : ARMOR_POOL[selectedRarity];
-        const name = namePool[Math.floor(Math.random() * namePool.length)];
+        if (totalPulls === 0) return;
 
-        // Base Stat Calculation with Variance
-        const rarityIdx = RARITIES.indexOf(selectedRarity) + 1;
-        const basePower = rarityIdx * 10 * Math.pow(1.2, gachaLevel - 1);
+        setCoins(currentCoins);
+        setGachaLevel(currentGachaLevel);
+        setGachaExp(currentGachaExp);
+        setGachaResult(lastItem);
 
-        // Specialize stats: Weapons = ATK focus, Armor = DEF focus
-        // Also add 0.8x to 1.2x variance
-        const getVariance = () => 0.8 + Math.random() * 0.4;
+        let willEquipWeaponId = equippedWeaponId;
+        let willEquipArmorId = equippedArmorId;
 
-        let finalAtk = Math.floor(basePower * getVariance());
-        let finalDef = Math.floor(basePower * getVariance());
-        let finalHp = Math.floor(basePower * getVariance() * 2);
-
-        if (type === 'weapon') {
-            finalAtk = Math.floor(finalAtk * 1.5);
-            finalDef = Math.floor(finalDef * 0.5);
-            finalHp = Math.floor(finalHp * 0.8);
-        } else {
-            finalAtk = Math.floor(finalAtk * 0.5);
-            finalDef = Math.floor(finalDef * 1.5);
-            finalHp = Math.floor(finalHp * 2.0);
+        if (itemsToAdd.length > 0) {
+            setInventory(prev => [...prev, ...itemsToAdd]);
+            itemsToAdd.forEach(it => {
+                if (it.type === 'weapon' && !willEquipWeaponId) {
+                    willEquipWeaponId = it.id;
+                    setEquippedWeaponId(it.id);
+                }
+                if (it.type === 'armor' && !willEquipArmorId) {
+                    willEquipArmorId = it.id;
+                    setEquippedArmorId(it.id);
+                }
+            });
         }
 
-        const newItem: GachaItem = {
-            id: Math.random().toString(36).substr(2, 9),
-            name,
-            type,
-            rarity: selectedRarity,
-            level: 1,
-            unlimit: 0,
-            atk: finalAtk,
-            def: finalDef,
-            hp: finalHp
-        };
-
-        // Auto-sell logic
-        const thresholdIdx = autoSellThreshold === 'None' ? -1 : RARITIES.indexOf(autoSellThreshold);
-        const currentIdx = RARITIES.indexOf(selectedRarity);
-
-        if (currentIdx <= thresholdIdx) {
-            const reward = (currentIdx + 1) * 5;
+        if (elementGains.weapon > 0 || elementGains.armor > 0) {
             setElements(prev => ({
-                ...prev,
-                [type]: prev[type] + reward
+                weapon: prev.weapon + elementGains.weapon,
+                armor: prev.armor + elementGains.armor
             }));
-            addLog(`[自動売却] ${newItem.name} (${selectedRarity}) を売却し素材 ${reward} 個を獲得しました。`, 'system');
-        } else {
-            setInventory(prev => [...prev, newItem]);
-            if (type === 'weapon' && !equippedWeaponId) setEquippedWeaponId(newItem.id);
-            if (type === 'armor' && !equippedArmorId) setEquippedArmorId(newItem.id);
         }
 
-        setGachaResult(newItem);
+        if (leveledUp) {
+            addLog(`ガチャレベルが ${currentGachaLevel} に上がった！`, 'system');
+        }
 
-        setGachaExp(prev => {
-            const next = prev + 10;
-            if (next >= getGachaLevelUpExp(gachaLevel)) {
-                setGachaLevel(l => l + 1);
-                addLog(`ガチャレベルが ${gachaLevel + 1} に上がった！`, 'system');
-                return 0;
-            }
-            return next;
-        });
+        if (totalPulls > 1) {
+            addLog(`ガチャを ${totalPulls} 回引きました。`, 'system');
+        } else if (lastItem && RARITIES.indexOf(lastItem.rarity) <= (autoSellThreshold === 'None' ? -1 : RARITIES.indexOf(autoSellThreshold))) {
+            const currentIdx = RARITIES.indexOf(lastItem.rarity);
+            addLog(`[自動売却] ${lastItem.name} (${lastItem.rarity}) を売却し素材 ${(currentIdx + 1) * 5} 個を獲得しました。`, 'system');
+        }
     };
 
-    const buyGachaLevel = () => {
-        const cost = Math.floor(1000 * Math.pow(3, gachaLevel - 1)); // Increased scaling factor
-        if (coins < cost) return;
-        setCoins(prev => prev - cost);
-        setGachaLevel(prev => prev + 1);
-        setGachaExp(0);
-        addLog(`ガチャレベルを ${gachaLevel + 1} にアップグレードしました！`, 'system');
+    const handlePostAnnouncement = async () => {
+        if (!newAnnouncementTitle || !newAnnouncementContent) return;
+        setIsPostingAnnouncement(true);
+        const res = await createAnnouncement(newAnnouncementTitle, newAnnouncementContent);
+        if (res.success) {
+            setNewAnnouncementTitle('');
+            setNewAnnouncementContent('');
+            const data = await getAnnouncements();
+            setAnnouncements(data);
+            addLog('お知らせを投稿しました。', 'system');
+        }
+        setIsPostingAnnouncement(false);
     };
 
     const handleManualSave = async () => {
@@ -574,6 +671,44 @@ export default function GameClient() {
             console.error("Manual save failed", e);
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleDebugEditUser = async (targetUsername: string) => {
+        if (currentUser?.username !== 'debug') return;
+        
+        const dataStr = await getGameDataByUsername(targetUsername);
+        if (dataStr) {
+            try {
+                const data = JSON.parse(dataStr);
+                setDebugEditingUser(targetUsername);
+                setDebugEditingData(data);
+            } catch (e) {
+                alert('データのパースに失敗しました。');
+            }
+        } else {
+            alert('データが見つかりません。');
+        }
+    };
+
+    const handleDebugSaveUser = async () => {
+        if (!debugEditingUser || !debugEditingData) return;
+        
+        setIsDebugSaving(true);
+        try {
+            const res = await updateGameDataByUsername(debugEditingUser, JSON.stringify(debugEditingData));
+            if (res.success) {
+                alert(`${debugEditingUser} のデータを更新しました。`);
+                setDebugEditingUser(null);
+                setDebugEditingData(null);
+            } else {
+                alert('データの保存に失敗しました。');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('エラーが発生しました。');
+        } finally {
+            setIsDebugSaving(false);
         }
     };
 
@@ -710,8 +845,14 @@ export default function GameClient() {
 
     // --- Effects ---
 
+    // Keep HP within bounds when max HP changes (e.g. equipment sell/swap)
+    useEffect(() => {
+        if (stats.hp > totalMaxHp) {
+            setStats(prev => ({ ...prev, hp: totalMaxHp }));
+        }
+    }, [totalMaxHp]);
+
     // Initial Enemy Load — only regenerate on stage/enemyIndex change (NOT bossChallenging)
-    // Boss challenge is handled explicitly in handleBossChallenge via setEnemy
     useEffect(() => {
         if (!bossChallenging) {
             setEnemy(generateEnemy(stage, enemyIndex, false));
@@ -943,7 +1084,7 @@ export default function GameClient() {
     const buyFacility = (id: number) => {
         const f = FACILITIES.find(f => f.id === id)!;
         const count = facilityCounts[id] || 0;
-        const price = f.basePrice * Math.pow(1.15, count);
+        const price = Math.ceil(f.basePrice * Math.pow(1.15, count));
 
         if (coins >= price) {
             setCoins(prev => prev - price);
@@ -1382,14 +1523,15 @@ export default function GameClient() {
                         )}
                     </AnimatePresence>
                     <header className="p-4 border-b border-slate-800/50 flex items-center justify-between gap-2">
-                        <div className="grid grid-cols-6 gap-1 p-1 bg-slate-900 rounded-xl flex-1">
+                        <div className="grid grid-cols-7 gap-1 p-1 bg-slate-900 rounded-xl flex-1">
                             {[
                                 { id: 'facility', label: '施設', icon: ShoppingCart },
-                                { id: 'equipment', label: 'クリック強化', icon: Zap },
+                                { id: 'equipment', label: '強化', icon: Zap },
                                 { id: 'gacha', label: 'ガチャ', icon: Trophy },
                                 { id: 'inventory', label: '装備', icon: Sword },
                                 { id: 'stats', label: '詳細', icon: TrendingUp },
-                                { id: 'ranking', label: 'ランキング', icon: Star }
+                                { id: 'ranking', label: '順位', icon: Star },
+                                { id: 'announcements', label: '告知', icon: Info }
                             ].map((tab) => (
                                 <button
                                     key={tab.id}
@@ -1397,9 +1539,14 @@ export default function GameClient() {
                                         setActiveTab(tab.id as any);
                                         if (tab.id === 'ranking') fetchRanking();
                                     }}
-                                    className={`px-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-tight transition-all flex flex-col items-center justify-center gap-1 ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                    className={`px-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-tight transition-all flex flex-col items-center justify-center gap-1 relative ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
                                 >
-                                    <tab.icon size={12} />
+                                    <div className="relative">
+                                        <tab.icon size={12} />
+                                        {tab.id === 'announcements' && announcements.length > 0 && announcements[0].id !== lastReadAnnouncementId && (
+                                            <span className="absolute -top-1.5 -right-1.5 w-2 h-2 bg-red-500 rounded-full border border-slate-900 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse" />
+                                        )}
+                                    </div>
                                     <span className="truncate w-full text-center">{tab.label}</span>
                                 </button>
                             ))}
@@ -1445,7 +1592,7 @@ export default function GameClient() {
                                     return f.id <= highestPurchasedId + 1 || coins >= f.basePrice;
                                 }).map(f => {
                                     const count = facilityCounts[f.id] || 0;
-                                    const price = f.basePrice * Math.pow(1.15, count);
+                                    const price = Math.ceil(f.basePrice * Math.pow(1.15, count));
                                     const canAfford = coins >= price;
                                     return (
                                         <button
@@ -1542,37 +1689,40 @@ export default function GameClient() {
                                                 </span>
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={buyGachaLevel}
-                                            className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/20 transition-all"
-                                        >
-                                            LvUP: {formatNumber(Math.floor(1000 * Math.pow(3, gachaLevel - 1)))}
-                                        </button>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">熟練度</p>
+                                            <p className="text-xs font-black text-white italic">{gachaExp} <span className="text-slate-500">/ {getGachaLevelUpExp(gachaLevel)}</span></p>
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                        <div className="flex justify-between text-[9px] font-black text-slate-500 uppercase">
-                                            <span>熟練度</span>
-                                            <span>{gachaExp} / {getGachaLevelUpExp(gachaLevel)}</span>
-                                        </div>
-                                        <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden">
-                                            <div className="h-full bg-blue-500" style={{ width: `${(gachaExp / getGachaLevelUpExp(gachaLevel)) * 100}%` }} />
-                                        </div>
+                                    <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden">
+                                        <div className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${(gachaExp / getGachaLevelUpExp(gachaLevel)) * 100}%` }} />
                                     </div>
 
                                     {/* Probability Table */}
                                     <div className="pt-2 border-t border-slate-800 space-y-2">
-                                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest text-center">現在の排出確率</p>
+                                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest text-center">排出確率 & 解放状況</p>
                                         <div className="grid grid-cols-5 gap-1.5">
                                             {(() => {
                                                 const weights = getGachaWeights(gachaLevel);
                                                 const total = Object.values(weights).reduce((a, b) => a + b, 0);
-                                                return RARITIES.slice(0, 10).map(r => (
-                                                    <div key={r} className="text-center p-1 bg-slate-950/50 rounded border border-slate-800/50">
-                                                        <p className={`text-[8px] font-black ${RARITY_CONFIG[r].color}`}>{r}</p>
-                                                        <p className="text-[7px] font-bold text-slate-400">{(weights[r] / total * 100).toFixed(1)}%</p>
-                                                    </div>
-                                                ));
+                                                const thresholds: any = {
+                                                    'SR': 3, 'SSR': 5, 'SSSR': 7, 'LEGEND': 10, 'GOD': 15, 'GOD+': 20
+                                                };
+
+                                                return RARITIES.slice(0, 10).map(r => {
+                                                    const isLocked = weights[r] === 0;
+                                                    return (
+                                                        <div key={r} className={`text-center p-1 rounded border ${isLocked ? 'bg-slate-950/20 border-slate-900 opacity-40' : 'bg-slate-950/50 border-slate-800/50'}`}>
+                                                            <p className={`text-[8px] font-black ${RARITY_CONFIG[r].color}`}>{r}</p>
+                                                            {isLocked ? (
+                                                                <p className="text-[6px] font-bold text-slate-600">Lv.{thresholds[r]}</p>
+                                                            ) : (
+                                                                <p className="text-[7px] font-bold text-slate-400">{(weights[r] / total * 100).toFixed(weights[r] / total * 100 < 0.1 ? 3 : 1)}%</p>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                });
                                             })()}
                                         </div>
                                     </div>
@@ -1622,20 +1772,46 @@ export default function GameClient() {
                                     </motion.button>
                                 </div>
 
-                                <div className="flex flex-col items-center gap-4">
+                                <div className="space-y-3">
                                     <motion.button
                                         whileHover={{ scale: 1.02 }}
                                         whileTap={{ scale: 0.98 }}
-                                        onClick={handleGacha}
+                                        onClick={() => handleGacha(1)}
                                         disabled={coins < 500 * Math.pow(1.5, gachaLevel - 1)}
-                                        className="w-full py-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl font-black text-white shadow-lg shadow-orange-900/20 flex flex-col items-center gap-1 disabled:opacity-50 disabled:grayscale"
+                                        className="w-full py-4 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl font-black text-white shadow-lg shadow-orange-900/20 flex flex-col items-center gap-1 disabled:opacity-50 disabled:grayscale transition-all"
                                     >
                                         <span className="text-lg uppercase tracking-[0.2em]">通常ガチャを回す</span>
                                         <span className="text-[10px] opacity-80 flex items-center gap-1"><Coins size={10} /> {formatNumber(500 * Math.pow(1.5, gachaLevel - 1))} コイン</span>
                                     </motion.button>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => handleGacha(100)}
+                                            className="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-widest border border-slate-700 transition-all flex flex-col items-center gap-0.5"
+                                        >
+                                            <span>100回引く</span>
+                                            <span className="text-[8px] text-slate-500 flex items-center gap-1">
+                                                <Coins size={8} /> {formatNumber(100 * 500 * Math.pow(1.5, gachaLevel - 1))}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleGacha(1000)}
+                                            className="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-widest border border-slate-700 transition-all flex flex-col items-center gap-0.5"
+                                        >
+                                            <span>1000回引く</span>
+                                            <span className="text-[8px] text-slate-500 flex items-center gap-1">
+                                                <Coins size={8} /> {formatNumber(1000 * 500 * Math.pow(1.5, gachaLevel - 1))}
+                                            </span>
+                                        </button>
+                                    </div>
+                                    
+                                    {coins < 500 * Math.pow(1.5, gachaLevel - 1) && (
+                                        <p className="text-[9px] font-bold text-red-500 text-center animate-pulse">コインが不足しています</p>
+                                    )}
 
                                     {gachaResult && (
                                         <motion.div
+                                            key={gachaResult.id}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             className={`p-4 rounded-xl border-2 ${RARITY_CONFIG[gachaResult.rarity].color.replace('text-', 'border-')}/30 bg-slate-900 w-full text-center shadow-2xl`}
@@ -2057,7 +2233,11 @@ export default function GameClient() {
                                             </thead>
                                             <tbody className="divide-y divide-slate-800/30">
                                                 {ranking.map((player, idx) => (
-                                                    <tr key={idx} className={`group ${player.username === currentUser?.username ? 'bg-blue-500/10' : ''}`}>
+                                                    <tr 
+                                                        key={idx} 
+                                                        onClick={() => currentUser?.username === 'debug' && handleDebugEditUser(player.username)}
+                                                        className={`group ${player.username === currentUser?.username ? 'bg-blue-500/10' : ''} ${currentUser?.username === 'debug' ? 'cursor-pointer hover:bg-red-500/10' : ''}`}
+                                                    >
                                                         <td className="px-4 py-3">
                                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-amber-500 text-slate-950' :
                                                                     idx === 1 ? 'bg-slate-300 text-slate-950' :
@@ -2071,6 +2251,9 @@ export default function GameClient() {
                                                             <span className="text-xs font-bold text-white group-hover:text-blue-400 transition-colors">{player.username}</span>
                                                             {player.username === currentUser?.username && (
                                                                 <span className="ml-2 text-[8px] font-black text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded uppercase">You</span>
+                                                            )}
+                                                            {currentUser?.username === 'debug' && player.username !== 'debug' && (
+                                                                <span className="ml-2 text-[8px] font-black text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded uppercase">Edit</span>
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
@@ -2097,6 +2280,69 @@ export default function GameClient() {
                                             ※ ランキングはステージクリア時および転生時に自動的に更新されます。
                                         </p>
                                     </div>
+                                </div>
+                            </div>
+                        )}
+                        {activeTab === 'announcements' && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                                {currentUser?.username === 'debug' && (
+                                    <div className="bg-slate-900/50 p-5 rounded-2xl border border-red-500/30 space-y-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Settings size={14} className="text-red-500" />
+                                            <h4 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">管理者告知投稿</h4>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <input 
+                                                type="text" 
+                                                placeholder="告知タイトル"
+                                                value={newAnnouncementTitle}
+                                                onChange={(e) => setNewAnnouncementTitle(e.target.value)}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-black text-white focus:border-red-500/50 outline-none transition-all"
+                                            />
+                                            <textarea 
+                                                placeholder="告知内容..."
+                                                value={newAnnouncementContent}
+                                                onChange={(e) => setNewAnnouncementContent(e.target.value)}
+                                                className="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs font-bold text-slate-300 focus:border-red-500/50 outline-none transition-all custom-scrollbar"
+                                            />
+                                            <button 
+                                                onClick={handlePostAnnouncement}
+                                                disabled={isPostingAnnouncement || !newAnnouncementTitle || !newAnnouncementContent}
+                                                className="w-full py-3 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-red-900/20 transition-all"
+                                            >
+                                                {isPostingAnnouncement ? '投稿中...' : '告知を投稿する'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    {announcements.length === 0 ? (
+                                        <div className="text-center py-20 opacity-30">
+                                            <Info size={40} className="mx-auto mb-3" />
+                                            <p className="text-xs font-black uppercase tracking-widest">現在のお知らせはありません</p>
+                                        </div>
+                                    ) : (
+                                        announcements.map((ann) => (
+                                            <div key={ann.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-3 relative overflow-hidden group">
+                                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                                    <Info size={48} />
+                                                </div>
+                                                <div className="flex justify-between items-start relative z-10">
+                                                    <h4 className="text-sm font-black text-white tracking-tight leading-tight flex-1 pr-4">{ann.title}</h4>
+                                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                                                        {new Date(ann.createdAt).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs font-medium text-slate-400 leading-relaxed whitespace-pre-wrap relative z-10">
+                                                    {ann.content}
+                                                </div>
+                                                {ann.id === announcements[0].id && ann.id !== lastReadAnnouncementId && (
+                                                    <div className="absolute top-0 left-0 w-1 h-full bg-red-500 shadow-[2px_0_10px_rgba(239,68,68,0.3)]" />
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -2170,6 +2416,249 @@ export default function GameClient() {
                                         className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-black text-sm uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] border border-slate-700"
                                     >
                                         フィールドに戻る
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Debug User Edit Modal */}
+                <AnimatePresence>
+                    {debugEditingUser && debugEditingData && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="bg-slate-900 border border-slate-800 w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden"
+                            >
+                                <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tighter">User Data Editor</h3>
+                                        <p className="text-xs font-bold text-red-500 uppercase tracking-widest">Editing: {debugEditingUser}</p>
+                                    </div>
+                                    <button onClick={() => setDebugEditingUser(null)} className="p-2 text-slate-500 hover:text-white transition-colors">
+                                        <X size={24} />
+                                    </button>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                                    {/* Basic Stats */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Coins</label>
+                                            <input 
+                                                type="number" 
+                                                value={debugEditingData.coins} 
+                                                onChange={(e) => setDebugEditingData({...debugEditingData, coins: Number(e.target.value)})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-yellow-500 focus:border-yellow-500/50 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stage</label>
+                                            <input 
+                                                type="number" 
+                                                value={debugEditingData.stage} 
+                                                onChange={(e) => setDebugEditingData({...debugEditingData, stage: Number(e.target.value)})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-blue-400 focus:border-blue-400/50 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Level</label>
+                                            <input 
+                                                type="number" 
+                                                value={debugEditingData.level} 
+                                                onChange={(e) => setDebugEditingData({...debugEditingData, level: Number(e.target.value)})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-emerald-400 focus:border-emerald-400/50 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dungeon Transcendence</label>
+                                            <input 
+                                                type="number" 
+                                                value={debugEditingData.dungeonTranscendence} 
+                                                onChange={(e) => setDebugEditingData({...debugEditingData, dungeonTranscendence: Number(e.target.value)})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-purple-400 focus:border-purple-400/50 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Facilities */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Facilities Level</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {FACILITIES.map(f => (
+                                                <div key={f.id} className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-4">
+                                                    <span className="text-[10px] font-black text-slate-300 truncate">{f.name}</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={debugEditingData.facilityCounts?.[f.id] || 0} 
+                                                        onChange={(e) => setDebugEditingData({
+                                                            ...debugEditingData, 
+                                                            facilityCounts: {
+                                                                ...debugEditingData.facilityCounts,
+                                                                [f.id]: Number(e.target.value)
+                                                            }
+                                                        })}
+                                                        className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs font-black text-blue-400 text-center"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Inventory & Equipment */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Inventory & Equipment</h4>
+                                        <div className="space-y-4">
+                                            {/* Currently Equipped Summary */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-slate-950/50 p-3 rounded-xl border border-blue-500/30">
+                                                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Equipped Weapon ID</p>
+                                                    <input 
+                                                        type="text"
+                                                        value={debugEditingData.equippedWeaponId || ''}
+                                                        onChange={(e) => setDebugEditingData({...debugEditingData, equippedWeaponId: e.target.value})}
+                                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-white"
+                                                    />
+                                                </div>
+                                                <div className="bg-slate-950/50 p-3 rounded-xl border border-purple-500/30">
+                                                    <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-1">Equipped Summon ID</p>
+                                                    <input 
+                                                        type="text"
+                                                        value={debugEditingData.equippedArmorId || ''}
+                                                        onChange={(e) => setDebugEditingData({...debugEditingData, equippedArmorId: e.target.value})}
+                                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-white"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Item List */}
+                                            <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                                                {(debugEditingData.inventory || []).map((item: any, itemIdx: number) => (
+                                                    <div key={item.id || itemIdx} className={`bg-slate-950/30 p-4 rounded-2xl border ${item.id === debugEditingData.equippedWeaponId || item.id === debugEditingData.equippedArmorId ? 'border-blue-500/50 bg-blue-500/5' : 'border-slate-800'} space-y-3`}>
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border border-current ${RARITY_CONFIG[item.rarity as Rarity]?.color || 'text-slate-400'} bg-slate-950`}>
+                                                                    {item.rarity}
+                                                                </span>
+                                                                <input 
+                                                                    type="text"
+                                                                    value={item.name}
+                                                                    onChange={(e) => {
+                                                                        const newInv = [...debugEditingData.inventory];
+                                                                        newInv[itemIdx] = {...item, name: e.target.value};
+                                                                        setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    }}
+                                                                    className="text-xs font-black text-white bg-transparent border-none p-0 focus:ring-0 w-48"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        if (item.type === 'weapon') setDebugEditingData({...debugEditingData, equippedWeaponId: item.id});
+                                                                        else setDebugEditingData({...debugEditingData, equippedArmorId: item.id});
+                                                                    }}
+                                                                    className={`text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest ${item.id === debugEditingData.equippedWeaponId || item.id === debugEditingData.equippedArmorId ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
+                                                                >
+                                                                    {item.id === debugEditingData.equippedWeaponId || item.id === debugEditingData.equippedArmorId ? 'Equipped' : 'Equip'}
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        const newInv = debugEditingData.inventory.filter((_: any, i: number) => i !== itemIdx);
+                                                                        setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    }}
+                                                                    className="text-[8px] font-black text-red-500 hover:bg-red-500/10 px-2 py-1 rounded uppercase"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-5 gap-2">
+                                                            <div className="space-y-1">
+                                                                <p className="text-[7px] font-black text-slate-500 uppercase">Lv</p>
+                                                                <input type="number" value={item.level} onChange={(e) => {
+                                                                    const newInv = [...debugEditingData.inventory];
+                                                                    newInv[itemIdx] = {...item, level: Number(e.target.value)};
+                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-white" />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[7px] font-black text-slate-500 uppercase">Unlimit</p>
+                                                                <input type="number" value={item.unlimit} onChange={(e) => {
+                                                                    const newInv = [...debugEditingData.inventory];
+                                                                    newInv[itemIdx] = {...item, unlimit: Number(e.target.value)};
+                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-white" />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[7px] font-black text-blue-400 uppercase">ATK</p>
+                                                                <input type="number" value={item.atk} onChange={(e) => {
+                                                                    const newInv = [...debugEditingData.inventory];
+                                                                    newInv[itemIdx] = {...item, atk: Number(e.target.value)};
+                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-blue-400" />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[7px] font-black text-emerald-400 uppercase">DEF</p>
+                                                                <input type="number" value={item.def} onChange={(e) => {
+                                                                    const newInv = [...debugEditingData.inventory];
+                                                                    newInv[itemIdx] = {...item, def: Number(e.target.value)};
+                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-emerald-400" />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[7px] font-black text-cyan-400 uppercase">HP</p>
+                                                                <input type="number" value={item.hp} onChange={(e) => {
+                                                                    const newInv = [...debugEditingData.inventory];
+                                                                    newInv[itemIdx] = {...item, hp: Number(e.target.value)};
+                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-cyan-400" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Raw JSON Editor for the rest */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Raw JSON Data (Careful!)</h4>
+                                        <textarea 
+                                            value={JSON.stringify(debugEditingData, null, 2)}
+                                            onChange={(e) => {
+                                                try {
+                                                    const parsed = JSON.parse(e.target.value);
+                                                    setDebugEditingData(parsed);
+                                                } catch (err) {}
+                                            }}
+                                            className="w-full h-48 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[10px] font-mono text-slate-400 focus:border-blue-500/50 outline-none transition-all custom-scrollbar"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex gap-4">
+                                    <button 
+                                        onClick={() => setDebugEditingUser(null)}
+                                        className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleDebugSaveUser}
+                                        disabled={isDebugSaving}
+                                        className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        {isDebugSaving ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+                                        Save Changes
                                     </button>
                                 </div>
                             </motion.div>
