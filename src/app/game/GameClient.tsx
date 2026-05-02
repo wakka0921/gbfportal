@@ -20,11 +20,11 @@ import {
     TITLES
 } from './gameData';
 
-import { 
-    getCurrentUser, 
-    updateGameScore, 
-    getGameRanking, 
-    consumeDailyTicket, 
+import {
+    getCurrentUser,
+    updateGameScore,
+    getGameRanking,
+    consumeDailyTicket,
     deleteGameScore,
     saveGameData,
     getGameData,
@@ -192,6 +192,7 @@ export default function GameClient() {
     const [newAnnouncementTitle, setNewAnnouncementTitle] = useState('');
     const [newAnnouncementContent, setNewAnnouncementContent] = useState('');
     const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
+    const [autoBossChallenge, setAutoBossChallenge] = useState(false);
 
     // --- Derived State (Multipliers) ---
     const dungeonTransMult = 1 + dungeonTranscendence * 0.5;
@@ -215,7 +216,7 @@ export default function GameClient() {
 
             // 2. Determine source of save data
             let savedDataStr = localStorage.getItem(SAVE_KEY);
-            
+
             if (user) {
                 try {
                     const serverDataStr = await getGameData();
@@ -256,6 +257,7 @@ export default function GameClient() {
                     if (data.isBossPending !== undefined) setIsBossPending(data.isBossPending);
                     if (data.showBossWarning !== undefined) setShowBossWarning(data.showBossWarning);
                     if (data.autoSellThreshold !== undefined) setAutoSellThreshold(data.autoSellThreshold);
+                    if (data.autoBossChallenge !== undefined) setAutoBossChallenge(data.autoBossChallenge);
 
                     // Calculate Offline Earnings
                     if (data.lastSaveTime) {
@@ -300,7 +302,7 @@ export default function GameClient() {
             enemyIndex, inventory, elements,
             gachaLevel, gachaExp,
             equippedWeaponId, equippedArmorId,
-            isBossPending, showBossWarning, autoSellThreshold,
+            isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge,
             lastSaveTime: Date.now()
         };
         localStorage.setItem(SAVE_KEY, JSON.stringify(dataToSave));
@@ -310,7 +312,7 @@ export default function GameClient() {
         enemyIndex, inventory, elements,
         gachaLevel, gachaExp,
         equippedWeaponId, equippedArmorId,
-        isBossPending, showBossWarning, autoSellThreshold
+        isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge
     ]);
 
     useEffect(() => {
@@ -334,7 +336,7 @@ export default function GameClient() {
     // Sync ranking data and game save to server (Debounced and Periodic)
     useEffect(() => {
         if (!isLoaded || !currentUser) return;
-        
+
         const syncToServer = async () => {
             try {
                 // 1. Sync Score (Ranking)
@@ -347,11 +349,11 @@ export default function GameClient() {
                     enemyIndex, inventory, elements,
                     gachaLevel, gachaExp,
                     equippedWeaponId, equippedArmorId,
-                    isBossPending, showBossWarning, autoSellThreshold,
+                    isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge,
                     lastSaveTime: Date.now()
                 };
                 await saveGameData(JSON.stringify(dataToSave));
-                
+
                 console.log('Synced game data to server.');
             } catch (e) {
                 console.error("Failed to sync to server", e);
@@ -367,7 +369,7 @@ export default function GameClient() {
         isLoaded, currentUser, stage, dungeonTranscendence, level, productionTranscendence, stats,
         facilityCounts, equipmentUnlocked, enemyIndex, inventory, elements,
         gachaLevel, gachaExp, equippedWeaponId, equippedArmorId,
-        isBossPending, showBossWarning, autoSellThreshold
+        isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge
     ]);
 
     // Periodic Sync (Every 60 seconds) to ensure coins/exp are eventually saved
@@ -381,7 +383,7 @@ export default function GameClient() {
                 enemyIndex, inventory, elements,
                 gachaLevel, gachaExp,
                 equippedWeaponId, equippedArmorId,
-                isBossPending, showBossWarning, autoSellThreshold,
+                isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge,
                 lastSaveTime: Date.now()
             };
             await saveGameData(JSON.stringify(dataToSave));
@@ -393,7 +395,7 @@ export default function GameClient() {
         isLoaded, currentUser, coins, level, exp, stage, dungeonTranscendence, productionTranscendence, stats,
         facilityCounts, equipmentUnlocked, enemyIndex, inventory, elements,
         gachaLevel, gachaExp, equippedWeaponId, equippedArmorId,
-        isBossPending, showBossWarning, autoSellThreshold
+        isBossPending, showBossWarning, autoSellThreshold, autoBossChallenge
     ]);
 
     // Fetch ranking data separately when tab is active
@@ -512,7 +514,7 @@ export default function GameClient() {
         let currentCoins = coins;
         let currentGachaLevel = gachaLevel;
         let currentGachaExp = gachaExp;
-        
+
         const itemsToAdd: GachaItem[] = [];
         const elementGains = { weapon: 0, armor: 0 };
         let lastItem: GachaItem | null = null;
@@ -522,7 +524,7 @@ export default function GameClient() {
         for (let i = 0; i < count; i++) {
             const COST = 500 * Math.pow(1.5, currentGachaLevel - 1);
             if (currentCoins < COST) break;
-            
+
             currentCoins -= COST;
             totalPulls++;
 
@@ -651,7 +653,7 @@ export default function GameClient() {
 
     const handleManualSave = async () => {
         if (!currentUser) return;
-        
+
         setIsSyncing(true);
         try {
             const dataToSave = {
@@ -676,7 +678,7 @@ export default function GameClient() {
 
     const handleDebugEditUser = async (targetUsername: string) => {
         if (currentUser?.username !== 'debug') return;
-        
+
         const dataStr = await getGameDataByUsername(targetUsername);
         if (dataStr) {
             try {
@@ -693,7 +695,7 @@ export default function GameClient() {
 
     const handleDebugSaveUser = async () => {
         if (!debugEditingUser || !debugEditingData) return;
-        
+
         setIsDebugSaving(true);
         try {
             const res = await updateGameDataByUsername(debugEditingUser, JSON.stringify(debugEditingData));
@@ -982,8 +984,16 @@ export default function GameClient() {
         } else {
             if (enemyIndex >= 19 && !isBossPending) {
                 setIsBossPending(true);
-                setShowBossWarning(true);
-                addLog(`第 ${stage} 層の守護者が出現しました。`, 'system');
+                if (autoBossChallenge) {
+                    // Start boss challenge automatically
+                    const boss = generateEnemy(stage, 20, true);
+                    setEnemy(boss);
+                    setBossChallenging(true);
+                    addLog(`エリアボス「${boss.name}」が出現！`, 'system');
+                } else {
+                    setShowBossWarning(true);
+                    addLog(`第 ${stage} 層の守護者が出現しました。`, 'system');
+                }
             }
             setEnemyIndex(prev => prev + 1);
         }
@@ -1299,6 +1309,22 @@ export default function GameClient() {
                     </div>
 
                     <div className="flex-1 flex flex-col items-center justify-center p-4 space-y-4 relative z-10">
+                        {/* Stage Info & Auto Boss Toggle */}
+                        <div className="w-full max-w-sm flex justify-between items-center bg-slate-900/40 p-2 rounded-2xl border border-slate-800/50">
+                            <div className="flex items-baseline gap-2 pl-2">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stage</span>
+                                <span className="text-xl font-black text-white italic tracking-tighter tabular-nums leading-none drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">{stage}</span>
+                                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">-{enemyIndex}</span>
+                            </div>
+                            <button
+                                onClick={() => setAutoBossChallenge(!autoBossChallenge)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${autoBossChallenge ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700 hover:text-slate-300'}`}
+                            >
+                                <Zap size={10} className={autoBossChallenge ? 'animate-pulse' : ''} />
+                                {autoBossChallenge ? 'オート戦闘 ON' : 'オート戦闘 OFF'}
+                            </button>
+                        </div>
+
                         {/* Boss Alert Overlay */}
                         <AnimatePresence>
                             {isBossPending && !bossChallenging && showBossWarning && (
@@ -1783,7 +1809,7 @@ export default function GameClient() {
                                         <span className="text-lg uppercase tracking-[0.2em]">通常ガチャを回す</span>
                                         <span className="text-[10px] opacity-80 flex items-center gap-1"><Coins size={10} /> {formatNumber(500 * Math.pow(1.5, gachaLevel - 1))} コイン</span>
                                     </motion.button>
-                                    
+
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             onClick={() => handleGacha(100)}
@@ -1804,7 +1830,7 @@ export default function GameClient() {
                                             </span>
                                         </button>
                                     </div>
-                                    
+
                                     {coins < 500 * Math.pow(1.5, gachaLevel - 1) && (
                                         <p className="text-[9px] font-bold text-red-500 text-center animate-pulse">コインが不足しています</p>
                                     )}
@@ -1945,7 +1971,7 @@ export default function GameClient() {
                                             </div>
                                         </div>
                                         {currentUser && (
-                                            <button 
+                                            <button
                                                 onClick={handleManualSave}
                                                 disabled={isSyncing}
                                                 className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${isSyncing ? 'bg-slate-800 text-slate-500' : 'bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white'}`}
@@ -2233,16 +2259,16 @@ export default function GameClient() {
                                             </thead>
                                             <tbody className="divide-y divide-slate-800/30">
                                                 {ranking.map((player, idx) => (
-                                                    <tr 
-                                                        key={idx} 
+                                                    <tr
+                                                        key={idx}
                                                         onClick={() => currentUser?.username === 'debug' && handleDebugEditUser(player.username)}
                                                         className={`group ${player.username === currentUser?.username ? 'bg-blue-500/10' : ''} ${currentUser?.username === 'debug' ? 'cursor-pointer hover:bg-red-500/10' : ''}`}
                                                     >
                                                         <td className="px-4 py-3">
                                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-amber-500 text-slate-950' :
-                                                                    idx === 1 ? 'bg-slate-300 text-slate-950' :
-                                                                        idx === 2 ? 'bg-amber-700 text-white' :
-                                                                            'bg-slate-800 text-slate-500'
+                                                                idx === 1 ? 'bg-slate-300 text-slate-950' :
+                                                                    idx === 2 ? 'bg-amber-700 text-white' :
+                                                                        'bg-slate-800 text-slate-500'
                                                                 }`}>
                                                                 {idx + 1}
                                                             </div>
@@ -2292,20 +2318,20 @@ export default function GameClient() {
                                             <h4 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">管理者告知投稿</h4>
                                         </div>
                                         <div className="space-y-3">
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="告知タイトル"
                                                 value={newAnnouncementTitle}
                                                 onChange={(e) => setNewAnnouncementTitle(e.target.value)}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-black text-white focus:border-red-500/50 outline-none transition-all"
                                             />
-                                            <textarea 
+                                            <textarea
                                                 placeholder="告知内容..."
                                                 value={newAnnouncementContent}
                                                 onChange={(e) => setNewAnnouncementContent(e.target.value)}
                                                 className="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs font-bold text-slate-300 focus:border-red-500/50 outline-none transition-all custom-scrollbar"
                                             />
-                                            <button 
+                                            <button
                                                 onClick={handlePostAnnouncement}
                                                 disabled={isPostingAnnouncement || !newAnnouncementTitle || !newAnnouncementContent}
                                                 className="w-full py-3 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-red-900/20 transition-all"
@@ -2447,43 +2473,128 @@ export default function GameClient() {
                                         <X size={24} />
                                     </button>
                                 </div>
-                                
-                                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+
+                                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                                    {/* Quick Actions */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Quick Actions</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800 space-y-2">
+                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Add Coins</p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number"
+                                                        id="debug_add_coins"
+                                                        placeholder="10000"
+                                                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs font-black text-yellow-500"
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            const val = Number((document.getElementById('debug_add_coins') as HTMLInputElement).value) || 0;
+                                                            setDebugEditingData({ ...debugEditingData, coins: (debugEditingData.coins || 0) + val });
+                                                        }}
+                                                        className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-black text-[10px] font-black rounded-lg"
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="bg-slate-950/50 p-3 rounded-2xl border border-slate-800 space-y-2">
+                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Add Level</p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number"
+                                                        id="debug_add_lv"
+                                                        placeholder="1"
+                                                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs font-black text-emerald-400"
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            const val = Number((document.getElementById('debug_add_lv') as HTMLInputElement).value) || 0;
+                                                            setDebugEditingData({ ...debugEditingData, level: (debugEditingData.level || 0) + val });
+                                                        }}
+                                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg"
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="col-span-2 bg-slate-950/50 p-3 rounded-2xl border border-slate-800 space-y-3">
+                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Add Specific Item</p>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <select id="debug_add_type" className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[10px] font-bold text-white">
+                                                        <option value="weapon">Weapon</option>
+                                                        <option value="armor">Summon</option>
+                                                    </select>
+                                                    <select id="debug_add_rarity" className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[10px] font-bold text-white">
+                                                        {RARITIES.map(r => <option key={r} value={r}>{r}</option>)}
+                                                    </select>
+                                                    <button
+                                                        onClick={() => {
+                                                            const type = (document.getElementById('debug_add_type') as HTMLSelectElement).value as 'weapon' | 'armor';
+                                                            const rarity = (document.getElementById('debug_add_rarity') as HTMLSelectElement).value as Rarity;
+                                                            const pool = type === 'weapon' ? WEAPON_POOL[rarity] : ARMOR_POOL[rarity];
+                                                            const name = pool[Math.floor(Math.random() * pool.length)];
+                                                            const newItem: GachaItem = {
+                                                                id: Math.random().toString(36).substr(2, 9),
+                                                                name,
+                                                                type,
+                                                                rarity,
+                                                                level: 1,
+                                                                unlimit: 0,
+                                                                atk: type === 'weapon' ? (RARITIES.indexOf(rarity) + 1) * 2 : 0,
+                                                                def: type === 'armor' ? (RARITIES.indexOf(rarity) + 1) * 2 : 0,
+                                                                hp: type === 'armor' ? (RARITIES.indexOf(rarity) + 1) * 10 : 0
+                                                            };
+                                                            setDebugEditingData({
+                                                                ...debugEditingData,
+                                                                inventory: [...(debugEditingData.inventory || []), newItem]
+                                                            });
+                                                        }}
+                                                        className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black rounded-lg"
+                                                    >
+                                                        Generate & Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Basic Stats */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Coins</label>
-                                            <input 
-                                                type="number" 
-                                                value={debugEditingData.coins} 
-                                                onChange={(e) => setDebugEditingData({...debugEditingData, coins: Number(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                value={debugEditingData.coins}
+                                                onChange={(e) => setDebugEditingData({ ...debugEditingData, coins: Number(e.target.value) })}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-yellow-500 focus:border-yellow-500/50 outline-none transition-all"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stage</label>
-                                            <input 
-                                                type="number" 
-                                                value={debugEditingData.stage} 
-                                                onChange={(e) => setDebugEditingData({...debugEditingData, stage: Number(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                value={debugEditingData.stage}
+                                                onChange={(e) => setDebugEditingData({ ...debugEditingData, stage: Number(e.target.value) })}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-blue-400 focus:border-blue-400/50 outline-none transition-all"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Level</label>
-                                            <input 
-                                                type="number" 
-                                                value={debugEditingData.level} 
-                                                onChange={(e) => setDebugEditingData({...debugEditingData, level: Number(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                value={debugEditingData.level}
+                                                onChange={(e) => setDebugEditingData({ ...debugEditingData, level: Number(e.target.value) })}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-emerald-400 focus:border-emerald-400/50 outline-none transition-all"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dungeon Transcendence</label>
-                                            <input 
-                                                type="number" 
-                                                value={debugEditingData.dungeonTranscendence} 
-                                                onChange={(e) => setDebugEditingData({...debugEditingData, dungeonTranscendence: Number(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                value={debugEditingData.dungeonTranscendence}
+                                                onChange={(e) => setDebugEditingData({ ...debugEditingData, dungeonTranscendence: Number(e.target.value) })}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-black text-purple-400 focus:border-purple-400/50 outline-none transition-all"
                                             />
                                         </div>
@@ -2496,11 +2607,11 @@ export default function GameClient() {
                                             {FACILITIES.map(f => (
                                                 <div key={f.id} className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-4">
                                                     <span className="text-[10px] font-black text-slate-300 truncate">{f.name}</span>
-                                                    <input 
-                                                        type="number" 
-                                                        value={debugEditingData.facilityCounts?.[f.id] || 0} 
+                                                    <input
+                                                        type="number"
+                                                        value={debugEditingData.facilityCounts?.[f.id] || 0}
                                                         onChange={(e) => setDebugEditingData({
-                                                            ...debugEditingData, 
+                                                            ...debugEditingData,
                                                             facilityCounts: {
                                                                 ...debugEditingData.facilityCounts,
                                                                 [f.id]: Number(e.target.value)
@@ -2521,19 +2632,19 @@ export default function GameClient() {
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="bg-slate-950/50 p-3 rounded-xl border border-blue-500/30">
                                                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Equipped Weapon ID</p>
-                                                    <input 
+                                                    <input
                                                         type="text"
                                                         value={debugEditingData.equippedWeaponId || ''}
-                                                        onChange={(e) => setDebugEditingData({...debugEditingData, equippedWeaponId: e.target.value})}
+                                                        onChange={(e) => setDebugEditingData({ ...debugEditingData, equippedWeaponId: e.target.value })}
                                                         className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-white"
                                                     />
                                                 </div>
                                                 <div className="bg-slate-950/50 p-3 rounded-xl border border-purple-500/30">
                                                     <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-1">Equipped Summon ID</p>
-                                                    <input 
+                                                    <input
                                                         type="text"
                                                         value={debugEditingData.equippedArmorId || ''}
-                                                        onChange={(e) => setDebugEditingData({...debugEditingData, equippedArmorId: e.target.value})}
+                                                        onChange={(e) => setDebugEditingData({ ...debugEditingData, equippedArmorId: e.target.value })}
                                                         className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-white"
                                                     />
                                                 </div>
@@ -2548,31 +2659,31 @@ export default function GameClient() {
                                                                 <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border border-current ${RARITY_CONFIG[item.rarity as Rarity]?.color || 'text-slate-400'} bg-slate-950`}>
                                                                     {item.rarity}
                                                                 </span>
-                                                                <input 
+                                                                <input
                                                                     type="text"
                                                                     value={item.name}
                                                                     onChange={(e) => {
                                                                         const newInv = [...debugEditingData.inventory];
-                                                                        newInv[itemIdx] = {...item, name: e.target.value};
-                                                                        setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                        newInv[itemIdx] = { ...item, name: e.target.value };
+                                                                        setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                     }}
                                                                     className="text-xs font-black text-white bg-transparent border-none p-0 focus:ring-0 w-48"
                                                                 />
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                <button 
+                                                                <button
                                                                     onClick={() => {
-                                                                        if (item.type === 'weapon') setDebugEditingData({...debugEditingData, equippedWeaponId: item.id});
-                                                                        else setDebugEditingData({...debugEditingData, equippedArmorId: item.id});
+                                                                        if (item.type === 'weapon') setDebugEditingData({ ...debugEditingData, equippedWeaponId: item.id });
+                                                                        else setDebugEditingData({ ...debugEditingData, equippedArmorId: item.id });
                                                                     }}
                                                                     className={`text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest ${item.id === debugEditingData.equippedWeaponId || item.id === debugEditingData.equippedArmorId ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
                                                                 >
                                                                     {item.id === debugEditingData.equippedWeaponId || item.id === debugEditingData.equippedArmorId ? 'Equipped' : 'Equip'}
                                                                 </button>
-                                                                <button 
+                                                                <button
                                                                     onClick={() => {
                                                                         const newInv = debugEditingData.inventory.filter((_: any, i: number) => i !== itemIdx);
-                                                                        setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                        setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                     }}
                                                                     className="text-[8px] font-black text-red-500 hover:bg-red-500/10 px-2 py-1 rounded uppercase"
                                                                 >
@@ -2586,40 +2697,40 @@ export default function GameClient() {
                                                                 <p className="text-[7px] font-black text-slate-500 uppercase">Lv</p>
                                                                 <input type="number" value={item.level} onChange={(e) => {
                                                                     const newInv = [...debugEditingData.inventory];
-                                                                    newInv[itemIdx] = {...item, level: Number(e.target.value)};
-                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    newInv[itemIdx] = { ...item, level: Number(e.target.value) };
+                                                                    setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                 }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-white" />
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <p className="text-[7px] font-black text-slate-500 uppercase">Unlimit</p>
                                                                 <input type="number" value={item.unlimit} onChange={(e) => {
                                                                     const newInv = [...debugEditingData.inventory];
-                                                                    newInv[itemIdx] = {...item, unlimit: Number(e.target.value)};
-                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    newInv[itemIdx] = { ...item, unlimit: Number(e.target.value) };
+                                                                    setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                 }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-white" />
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <p className="text-[7px] font-black text-blue-400 uppercase">ATK</p>
                                                                 <input type="number" value={item.atk} onChange={(e) => {
                                                                     const newInv = [...debugEditingData.inventory];
-                                                                    newInv[itemIdx] = {...item, atk: Number(e.target.value)};
-                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    newInv[itemIdx] = { ...item, atk: Number(e.target.value) };
+                                                                    setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                 }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-blue-400" />
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <p className="text-[7px] font-black text-emerald-400 uppercase">DEF</p>
                                                                 <input type="number" value={item.def} onChange={(e) => {
                                                                     const newInv = [...debugEditingData.inventory];
-                                                                    newInv[itemIdx] = {...item, def: Number(e.target.value)};
-                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    newInv[itemIdx] = { ...item, def: Number(e.target.value) };
+                                                                    setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                 }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-emerald-400" />
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <p className="text-[7px] font-black text-cyan-400 uppercase">HP</p>
                                                                 <input type="number" value={item.hp} onChange={(e) => {
                                                                     const newInv = [...debugEditingData.inventory];
-                                                                    newInv[itemIdx] = {...item, hp: Number(e.target.value)};
-                                                                    setDebugEditingData({...debugEditingData, inventory: newInv});
+                                                                    newInv[itemIdx] = { ...item, hp: Number(e.target.value) };
+                                                                    setDebugEditingData({ ...debugEditingData, inventory: newInv });
                                                                 }} className="w-full bg-slate-950 border border-slate-800 rounded p-1 text-[10px] text-cyan-400" />
                                                             </div>
                                                         </div>
@@ -2632,27 +2743,27 @@ export default function GameClient() {
                                     {/* Raw JSON Editor for the rest */}
                                     <div className="space-y-3">
                                         <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Raw JSON Data (Careful!)</h4>
-                                        <textarea 
+                                        <textarea
                                             value={JSON.stringify(debugEditingData, null, 2)}
                                             onChange={(e) => {
                                                 try {
                                                     const parsed = JSON.parse(e.target.value);
                                                     setDebugEditingData(parsed);
-                                                } catch (err) {}
+                                                } catch (err) { }
                                             }}
                                             className="w-full h-48 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[10px] font-mono text-slate-400 focus:border-blue-500/50 outline-none transition-all custom-scrollbar"
                                         />
                                     </div>
                                 </div>
-                                
+
                                 <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex gap-4">
-                                    <button 
+                                    <button
                                         onClick={() => setDebugEditingUser(null)}
                                         className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all"
                                     >
                                         Cancel
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={handleDebugSaveUser}
                                         disabled={isDebugSaving}
                                         className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
@@ -2669,22 +2780,22 @@ export default function GameClient() {
 
             {/* Mobile Bottom Navigation */}
             <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 z-50 flex items-center justify-around px-2 pb-safe">
-                <button 
-                    onClick={() => setMobileTab('clicker')} 
+                <button
+                    onClick={() => setMobileTab('clicker')}
                     className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'clicker' ? 'text-amber-500' : 'text-slate-500'}`}
                 >
                     <Coins size={20} />
                     <span className="text-[10px] font-bold">資源</span>
                 </button>
-                <button 
-                    onClick={() => setMobileTab('dungeon')} 
+                <button
+                    onClick={() => setMobileTab('dungeon')}
                     className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'dungeon' ? 'text-blue-500' : 'text-slate-500'}`}
                 >
                     <Sword size={20} />
                     <span className="text-[10px] font-bold">戦闘</span>
                 </button>
-                <button 
-                    onClick={() => setMobileTab('upgrades')} 
+                <button
+                    onClick={() => setMobileTab('upgrades')}
                     className={`flex-1 flex flex-col items-center gap-1 py-2 ${mobileTab === 'upgrades' ? 'text-purple-500' : 'text-slate-500'}`}
                 >
                     <Settings size={20} />
